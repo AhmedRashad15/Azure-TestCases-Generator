@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Case Generator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #007bff;
+            --secondary-color: #6c757d;
+            --background-color: #f8f9fa;
+            --card-background: #ffffff;
+            --text-color: #333;
+            --border-color: #dee2e6;
+            --success-color: #28a745;
+            --error-color: #dc3545;
+            --border-radius: 8px;
+            --box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+        }
+
+        body {
+            font-family: 'Poppins', sans-serif;
+            margin: 0;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        header {
+            background: var(--card-background);
+            padding: 1em 2em;
+            box-shadow: var(--box-shadow);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        header h1 {
+            margin: 0;
+            color: var(--primary-color);
+            font-weight: 600;
+        }
+
+        .container {
+            flex: 1;
+            max-width: 900px;
+            margin: 2em auto;
+            padding: 0 2em;
+            width: 100%;
+        }
+
+        .card {
+            background: var(--card-background);
+            border-radius: var(--border-radius);
+            padding: 2em;
+            margin-bottom: 2em;
+            box-shadow: var(--box-shadow);
+        }
+
+        h2, h3 {
+            margin-top: 0;
+            color: var(--primary-color);
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 0.5em;
+            margin-bottom: 1em;
+        }
+
+        label {
+            display: block;
+            margin-top: 1em;
+            margin-bottom: 0.5em;
+            font-weight: 500;
+        }
+
+        input, textarea {
+            width: 100%;
+            padding: 0.8em;
+            margin-top: 0.2em;
+            border: 1px solid var(--border-color);
+            border-radius: var(--border-radius);
+            font-family: 'Poppins', sans-serif;
+            box-sizing: border-box;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+
+        input:focus, textarea:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.2);
+        }
+        
+        input[readonly], textarea[readonly] {
+            background-color: #e9ecef;
+            cursor: not-allowed;
+        }
+
+        textarea {
+            height: 120px;
+            resize: vertical;
+        }
+
+        button {
+            padding: 0.8em 1.5em;
+            margin-top: 1.5em;
+            border: none;
+            border-radius: var(--border-radius);
+            background-color: var(--primary-color);
+            color: white;
+            font-family: 'Poppins', sans-serif;
+            font-weight: 500;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.2s;
+        }
+
+        button:hover:not(:disabled) {
+            background-color: #0056b3;
+            transform: translateY(-2px);
+        }
+        
+        button:disabled {
+            background-color: var(--secondary-color);
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+
+        .hidden { display: none; }
+
+        #test-cases-output {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            background-color: #2b303b;
+            color: #c0c5ce;
+            border: 1px solid var(--border-color);
+            border-radius: var(--border-radius);
+            padding: 1em;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        #loading-generator {
+            display: flex;
+            align-items: center;
+            gap: 1em;
+            margin-top: 1.5em;
+        }
+
+        .spinner {
+            width: 32px;
+            height: 32px;
+            border: 4px solid var(--border-color);
+            border-top-color: var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        #upload-status {
+            margin-top: 1em;
+            font-weight: 500;
+        }
+
+        footer {
+            text-align: center;
+            padding: 1em;
+            background: var(--card-background);
+            border-top: 1px solid var(--border-color);
+            color: var(--secondary-color);
+            font-size: 0.9em;
+        }
+
+        .accordion-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            padding: 1em;
+            background-color: #f7f7f7;
+            border: 1px solid var(--border-color);
+            border-radius: var(--border-radius);
+            margin-top: 1em;
+        }
+
+        .accordion-header:hover {
+            background-color: #e9ecef;
+        }
+
+        .accordion-header .title-group {
+            display: flex;
+            align-items: center;
+            gap: 1em;
+            flex: 1;
+            min-width: 0;
+        }
+
+        .accordion-header .title-group strong {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .accordion-content {
+            padding: 1em;
+            border: 1px solid var(--border-color);
+            border-top: none;
+            display: none;
+        }
+
+        .accordion-content.show {
+            display: block;
+        }
+
+        .actions {
+            display: flex;
+        }
+
+        .btn-sm {
+            padding: 0.3em 0.8em;
+            font-size: 0.8rem;
+            margin-top: 0;
+        }
+
+        .btn-danger { background-color: var(--error-color); }
+        .btn-danger:hover { background-color: #c82333; }
+        .btn-secondary { background-color: var(--secondary-color); }
+        .btn-secondary:hover { background-color: #5a6268; }
+
+        .readonly-content p {
+            background: #e9ecef;
+            padding: 0.8em;
+            border-radius: var(--border-radius);
+            border: 1px solid var(--border-color);
+            white-space: pre-wrap; /* To respect newlines */
+            margin: 0;
+        }
+
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Test Case Generator</h1>
+    </header>
+
+    <main class="container">
+        <div class="card">
+            <h2>1. Configuration</h2>
+            <label for="azure-devops-org-url">Azure DevOps Organization URL:</label>
+            <input type="text" id="azure-devops-org-url" name="azure_devops_org_url" placeholder="https://dev.azure.com/YOUR_ORGANIZATION">
+            
+            <label for="azure-devops-project-name">Project Name:</label>
+            <input type="text" id="azure-devops-project-name" name="azure_devops_project_name">
+    
+            <label for="azure-devops-pat">Personal Access Token (PAT):</label>
+            <input type="password" id="azure-devops-pat" name="azure_devops_pat" placeholder="Enter your PAT">
+    
+            <label for="user-story-id">User Story ID:</label>
+            <input type="text" id="user-story-id" name="user_story_id">
+            
+            <button id="fetch-story-btn">Fetch User Story</button>
+        </div>
+
+        <div id="story-details" class="hidden card">
+            <h2>2. User Story Details</h2>
+            <label for="story-title">Title:</label>
+            <input type="text" id="story-title" name="story_title">
+
+            <label for="story-description">Description:</label>
+            <textarea id="story-description" name="story_description"></textarea>
+
+            <label for="acceptance-criteria">Acceptance Criteria:</label>
+            <textarea id="acceptance-criteria" name="acceptance_criteria"></textarea>
+            
+            <label for="data-dictionary">Data Dictionary (Optional):</label>
+            <textarea id="data-dictionary" name="data_dictionary"></textarea>
+
+            <button id="generate-cases-btn">Generate Test Cases</button>
+            <div id="loading-generator" class="hidden">
+                <div class="spinner"></div>
+                <span id="generation-status">Generating...</span>
+            </div>
+
+            <div id="upload-section" class="hidden">
+                <h3>Upload to Azure DevOps</h3>
+                <label for="test-plan-id">Test Plan ID:</label>
+                <input type="text" id="test-plan-id" name="test_plan_id">
+                
+                <label for="test-suite-id">Test Suite ID:</label>
+                <input type="text" id="test-suite-id" name="test_suite_id">
+                
+                <button id="upload-cases-btn">Upload Test Cases</button>
+                <div id="upload-status"></div>
+            </div>
+        </div>
+
+        <div id="test-cases-section" class="hidden card">
+            <h2>3. Generated Test Cases <span id="test-case-count"></span></h2>
+            <div id="test-cases-container"></div>
+        </div>
+    </main>
+
+    <footer>
+        <p>Powered by Gemini</p>
+    </footer>
+
+    <script>
+        // DOM Elements
+        const fetchStoryBtn = document.getElementById('fetch-story-btn');
+        const generateCasesBtn = document.getElementById('generate-cases-btn');
+        const uploadCasesBtn = document.getElementById('upload-cases-btn');
+        
+        const storyDetails = document.getElementById('story-details');
+        const testCasesSection = document.getElementById('test-cases-section');
+        const uploadSection = document.getElementById('upload-section'); // This element doesn't exist anymore with the new structure, but the functionality is merged. Let's keep the logic clean.
+        
+        const loadingGenerator = document.getElementById('loading-generator');
+        const uploadStatus = document.getElementById('upload-status');
+        const generationStatus = document.getElementById('generation-status');
+        const testCasesContainer = document.getElementById('test-cases-container');
+
+        let allTestCases = [];
+
+        // Event Listeners
+        fetchStoryBtn.addEventListener('click', fetchStory);
+        generateCasesBtn.addEventListener('click', generateTestCases);
+        uploadCasesBtn.addEventListener('click', uploadTestCases);
+        testCasesContainer.addEventListener('click', handleCardClick);
+        testCasesContainer.addEventListener('input', updateTestCaseData);
+
+        async function fetchStory() {
+            const storyId = document.getElementById('user-story-id').value;
+            const orgUrl = document.getElementById('azure-devops-org-url').value;
+            const projectName = document.getElementById('azure-devops-project-name').value;
+            const pat = document.getElementById('azure-devops-pat').value;
+
+            if (!storyId || !orgUrl || !projectName || !pat) {
+                alert('Please fill out all Azure DevOps fields and the User Story ID.');
+                return;
+            }
+
+            fetchStoryBtn.disabled = true;
+            fetchStoryBtn.textContent = 'Fetching...';
+
+            const response = await fetch('/fetch_story', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    story_id: storyId,
+                    azure_devops_org_url: orgUrl,
+                    azure_devops_project_name: projectName,
+                    azure_devops_pat: pat
+                })
+            });
+            
+            fetchStoryBtn.disabled = false;
+            fetchStoryBtn.textContent = 'Fetch User Story';
+
+            if (response.ok) {
+                const data = await response.json();
+                document.getElementById('story-title').value = data.title;
+                document.getElementById('story-description').value = data.description;
+                document.getElementById('acceptance-criteria').value = data.acceptance_criteria;
+                storyDetails.classList.remove('hidden');
+                testCasesSection.classList.add('hidden');
+                document.getElementById('upload-section').classList.add('hidden');
+                allTestCases = [];
+                renderAllTestCases();
+            } else {
+                const error = await response.json();
+                alert('Error fetching story: ' + error.error);
+            }
+        }
+
+        async function generateTestCases() {
+            loadingGenerator.classList.remove('hidden');
+            generateCasesBtn.disabled = true;
+            testCasesSection.classList.add('hidden');
+            allTestCases = [];
+            renderAllTestCases();
+
+            const payload = {
+                story_title: document.getElementById('story-title').value,
+                story_description: document.getElementById('story-description').value,
+                acceptance_criteria: document.getElementById('acceptance-criteria').value,
+                data_dictionary: document.getElementById('data-dictionary').value
+            };
+
+            const eventSource = new EventSource(`/generate_test_cases?payload=${encodeURIComponent(JSON.stringify(payload))}`);
+            
+            // We need to modify the backend to accept GET with payload in query string
+            
+            generationStatus.textContent = 'Initializing generation...';
+
+            eventSource.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                if (data.type === 'done') {
+                    generationStatus.textContent = data.message;
+                    eventSource.close();
+                    loadingGenerator.classList.add('hidden');
+                    generateCasesBtn.disabled = false;
+                } else {
+                    generationStatus.textContent = data.progress;
+                    allTestCases.push(...data.cases);
+                    renderAllTestCases();
+                    testCasesSection.classList.remove('hidden');
+                    document.getElementById('upload-section').classList.remove('hidden');
+                }
+            };
+
+            eventSource.onerror = function(err) {
+                console.error("EventSource failed:", err);
+                generationStatus.textContent = 'An error occurred during generation.';
+                eventSource.close();
+                loadingGenerator.classList.add('hidden');
+                generateCasesBtn.disabled = false;
+            };
+        }
+
+        async function uploadTestCases() {
+            uploadStatus.textContent = 'Uploading...';
+            uploadCasesBtn.disabled = true;
+
+            const orgUrl = document.getElementById('azure-devops-org-url').value;
+            const projectName = document.getElementById('azure-devops-project-name').value;
+            const pat = document.getElementById('azure-devops-pat').value;
+
+            const payload = {
+                test_plan_id: document.getElementById('test-plan-id').value,
+                test_suite_id: document.getElementById('test-suite-id').value,
+                test_cases: JSON.stringify(allTestCases),
+                azure_devops_org_url: orgUrl,
+                azure_devops_project_name: projectName,
+                azure_devops_pat: pat
+            };
+
+            if (!payload.test_plan_id || !payload.test_suite_id || !payload.test_cases) {
+                alert('Please provide a Test Plan ID, a Test Suite ID, and ensure test cases have been generated.');
+                uploadStatus.textContent = '';
+                uploadCasesBtn.disabled = false;
+                return;
+            }
+
+            const response = await fetch('/upload_test_cases', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            
+            uploadCasesBtn.disabled = false;
+
+            if (response.ok) {
+                const data = await response.json();
+                uploadStatus.style.color = 'var(--success-color)';
+                uploadStatus.textContent = data.message;
+            } else {
+                const error = await response.json();
+                uploadStatus.style.color = 'var(--error-color)';
+                uploadStatus.textContent = 'Error uploading test cases: ' + error.error;
+            }
+        }
+
+        function renderAllTestCases() {
+            let allCardsHtml = '';
+            allTestCases.forEach((tc, index) => {
+                try {
+                    // Use || '' to prevent 'null' or 'undefined' from appearing.
+                    const title = tc.title || '';
+                    const priority = tc.priority || '';
+                    
+                    let description = tc.description || '';
+                    if (Array.isArray(description)) {
+                        description = description.join('\n');
+                    }
+                    
+                    // Safely convert to string BEFORE replacing, then replace newlines.
+                    const expectedResult = String(tc.expectedResult || '').replace(/\\n/g, '\n');
+
+                    allCardsHtml += `
+                        <div class="test-case-card" data-index="${index}">
+                            <div class="accordion-header">
+                                <strong>${tc.id || 'TC-' + index}: <span class="case-title">${title}</span></strong>
+                                <div class="actions">
+                                    <button class="btn-sm btn-danger delete-btn">Delete</button>
+                                </div>
+                            </div>
+                            <div class="accordion-content show"> <!-- EXPANDED BY DEFAULT -->
+                                <label>Title</label>
+                                <input type="text" class="tc-input" data-field="title" value="${title}">
+                                <label>Priority</label>
+                                <input type="text" class="tc-input" data-field="priority" value="${priority}">
+                                <label>Description (Steps)</label>
+                                <textarea class="tc-input" data-field="description">${description}</textarea>
+                                <label>Expected Result</label>
+                                <textarea class="tc-input" data-field="expectedResult">${expectedResult}</textarea>
+                            </div>
+                        </div>
+                    `;
+                } catch (e) {
+                    console.error("Error rendering a single test case:", tc, e);
+                }
+            });
+            testCasesContainer.innerHTML = allCardsHtml;
+            updateTotalCount();
+        }
+
+        function handleCardClick(event) {
+            const target = event.target;
+            const card = target.closest('.test-case-card');
+            if (!card) return;
+
+            if (target.matches('.delete-btn')) {
+                const index = parseInt(card.dataset.index, 10);
+                // No more confirmation
+                allTestCases.splice(index, 1);
+                renderAllTestCases();
+            } else if (target.closest('.accordion-header')) {
+                card.querySelector('.accordion-content').classList.toggle('show');
+            }
+        }
+        
+        function updateTestCaseData(event) {
+            const target = event.target;
+            if (target.classList.contains('tc-input')) {
+                const card = target.closest('.test-case-card');
+                const index = parseInt(card.dataset.index, 10);
+                const field = target.dataset.field;
+                allTestCases[index][field] = target.value;
+                
+                if (field === 'title') {
+                    card.querySelector('.case-title').textContent = target.value;
+                }
+            }
+        }
+
+        function updateTotalCount() {
+            const countSpan = document.getElementById('test-case-count');
+            if (allTestCases.length > 0) {
+                countSpan.textContent = `(${allTestCases.length} total)`;
+            } else {
+                countSpan.textContent = '';
+            }
+        }
+    </script>
+</body>
+</html> 

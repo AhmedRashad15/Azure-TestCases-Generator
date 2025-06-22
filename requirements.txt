@@ -1,0 +1,5 @@
+google-generativeai
+azure-devops
+Flask
+python-dotenv
+beautifulsoup4 
