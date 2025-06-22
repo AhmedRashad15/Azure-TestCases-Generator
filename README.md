@@ -43,4 +43,4 @@ A web application to automatically generate and upload high-quality test cases f
 - HTML/CSS/JS (frontend)
 
 ## Contact
-For questions or support, open an issue or contact [Ahmed Rashad](mailto:your-email@example.com). 
+For questions or support, open an issue or contact [Ahmed Rashad](mailto:ahmedmohamed255106@gmail.com). 
