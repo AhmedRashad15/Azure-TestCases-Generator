@@ -62,18 +62,44 @@ def fetch_story():
         description_text = BeautifulSoup(description_html, "html.parser").get_text(separator="\n").strip()
         acceptance_criteria_text = BeautifulSoup(acceptance_criteria_html, "html.parser").get_text(separator="\n").strip()
 
+        # Fetch related user stories (work item links)
+        related_stories = []
+        if hasattr(work_item, 'relations'):
+            for rel in work_item.relations:
+                if rel.rel in ["System.LinkTypes.Related", "System.LinkTypes.Hierarchy-Forward", "System.LinkTypes.Hierarchy-Reverse"]:
+                    url = rel.url
+                    related_id = url.split('/')[-1]
+                    try:
+                        related_item = work_item_tracking_client.get_work_item(id=related_id, project=azure_devops_project_name, expand='All')
+                        r_fields = related_item.fields
+                        if r_fields.get('System.WorkItemType', '') != 'User Story':
+                            continue
+                        r_title = r_fields.get('System.Title', '')
+                        r_desc_html = r_fields.get('System.Description', '')
+                        r_ac_html = r_fields.get('Microsoft.VSTS.Common.AcceptanceCriteria', '')
+                        r_desc = BeautifulSoup(r_desc_html, "html.parser").get_text(separator="\n").strip()
+                        r_ac = BeautifulSoup(r_ac_html, "html.parser").get_text(separator="\n").strip()
+                        related_stories.append({
+                            'id': related_id,
+                            'title': r_title,
+                            'description': r_desc,
+                            'acceptance_criteria': r_ac
+                        })
+                    except Exception as e:
+                        continue
+
         story_details = {
             'title': fields.get('System.Title', ''),
             'description': description_text,
-            'acceptance_criteria': acceptance_criteria_text
+            'acceptance_criteria': acceptance_criteria_text,
+            'related_stories': related_stories
         }
         return jsonify(story_details)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-def _generate_cases_for_type(model, story_title, story_description, acceptance_criteria, data_dictionary, case_type):
-    """Helper function to generate test cases for a specific type (e.g., Positive, Negative)."""
-
+def _generate_cases_for_type(model, story_title, story_description, acceptance_criteria, data_dictionary, case_type, related_stories=None):
+    """Helper function to generate test cases for a specific type (e.g., Positive, Negative), with related stories context."""
     guideline_map = {
         "Positive": """
 **Positive Test Case Guidelines:**
@@ -98,6 +124,11 @@ def _generate_cases_for_type(model, story_title, story_description, acceptance_c
     }
     
     specific_guidelines = guideline_map.get(case_type, "- Follow standard best practices for this test type.")
+    related_block = ""
+    if related_stories:
+        related_block = "\n**Related User Stories:**\n" + "\n".join([
+            f"- Title: {r.get('title', '')}\n  Description: {r.get('description', '')}\n  Acceptance Criteria: {r.get('acceptance_criteria', '')}" for r in related_stories
+        ])
 
     prompt = f"""
 You are an expert test case generator for Azure DevOps with a focus on comprehensive test coverage. Your task is to generate a JSON array of ONLY the **{case_type}** test cases for the user story below.
@@ -107,6 +138,7 @@ You are an expert test case generator for Azure DevOps with a focus on comprehen
 - **Description:** {story_description}
 - **Acceptance Criteria:** {acceptance_criteria}
 - **Data Dictionary:** {data_dictionary}
+{related_block}
 
 **Universal Guidelines:**
 1. **Consistency First:** For any '{case_type}' test, the `title`, `description`, and `expectedResult` must all be consistent with that scenario. For example, a 'Negative' test's title must describe a failure condition, and its expected result must describe the correct error handling.
@@ -161,6 +193,7 @@ def generate_test_cases_stream():
     story_description = data.get('story_description', '')
     acceptance_criteria = data.get('acceptance_criteria')
     data_dictionary = data.get('data_dictionary', '')
+    related_stories = data.get('related_stories', [])
 
     if not all([story_title, acceptance_criteria]):
         return Response("Story Title and Acceptance Criteria are required.", status=400)
@@ -174,7 +207,7 @@ def generate_test_cases_stream():
         for case_type in case_types:
             print(f"--- Generating {case_type} test cases... ---")
             # Generate cases for the current type
-            json_text_chunk = _generate_cases_for_type(model, story_title, story_description, acceptance_criteria, data_dictionary, case_type)
+            json_text_chunk = _generate_cases_for_type(model, story_title, story_description, acceptance_criteria, data_dictionary, case_type, related_stories)
             
             # The API might return an empty or invalid string, so we validate it
             try:

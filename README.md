@@ -1,40 +1,61 @@
-# Azure DevOps Test Case Generator
+# Test Genius Project
 
-A web application to automatically generate and upload high-quality test cases for Azure DevOps user stories using Google Gemini AI.
+A web app to generate and upload Azure DevOps test cases using Gemini AI.
 
 ## Features
-- Modern Flask web app UI
-- Secure Azure DevOps integration (PAT, org, project, etc. via UI)
-- Uses Gemini API for advanced test case generation (positive, negative, edge, data flow)
-- Real-time streaming of generated test cases
-- Robust de-duplication and error handling
-- Uploads test cases directly to Azure DevOps Test Plans
-- Mobile app awareness and platform-specific test generation
+- Generate test cases for a user story using Gemini AI
+- Include related user stories for better coverage
+- Edit and review test cases before upload
+- Upload test cases directly to Azure DevOps Test Plans
 
 ## Setup
+
 1. **Clone the repository:**
-   ```sh
-   git clone https://github.com/AhmedRashad15/Azure-TestCases-Generator.git
-   cd Azure-TestCases-Generator
-   ```
-2. **Install dependencies:**
-   ```sh
-   pip install -r requirements.txt
-   ```
-3. **Configure Gemini API Key:**
-   - Create a `.env` file in the project root:
-     ```
-     GEMINI_API_KEY=your_gemini_api_key_here
-     ```
-4. **Run the app:**
-   ```sh
-   python app.py
+   ```bash
+   git clone <your-repo-url>
+   cd <repo-folder>
    ```
 
+2. **Create a virtual environment (recommended):**
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   ```
+
+3. **Install dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. **Set up environment variables:**
+   - Create a `.env` file in the root directory (optional, for secrets).
+   - Add your Gemini API key and any other secrets as needed.
+
+5. **Run the app:**
+   ```bash
+   python app.py
+   ```
+   The app will be available at `http://localhost:5000`.
+
 ## Usage
-- Open the app in your browser (default: http://localhost:5000)
-- Enter your Azure DevOps credentials and user story ID
-- Generate, review, and upload test cases to your Azure DevOps Test Plan
+1. Enter your Azure DevOps details and User Story ID.
+2. Fetch the user story and select any related stories to include.
+3. Generate test cases, review/edit as needed.
+4. Enter your Test Plan and Suite IDs, then upload test cases to Azure DevOps.
+
+## Deployment
+- Push your changes to GitHub:
+  ```bash
+  git add .
+  git commit -m "Update app and docs for deployment"
+  git push
+  ```
+
+- For production deployment (Azure, Heroku, etc.), add a `Procfile` or `Dockerfile` as needed.
+
+## Notes
+- Never commit your PAT or API keys to the repository.
+- For issues, open a GitHub issue or contact the maintainer.
 
 ## Technologies Used
 - Python, Flask

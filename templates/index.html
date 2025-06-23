@@ -275,7 +275,11 @@
 
             <label for="acceptance-criteria">Acceptance Criteria:</label>
             <textarea id="acceptance-criteria" name="acceptance_criteria"></textarea>
-            
+
+            <div id="related-stories-section" class="hidden">
+                <h3>Related User Stories</h3>
+                <div id="related-stories-list"></div>
+            </div>
             <label for="data-dictionary">Data Dictionary (Optional):</label>
             <textarea id="data-dictionary" name="data_dictionary"></textarea>
 
@@ -316,7 +320,7 @@
         
         const storyDetails = document.getElementById('story-details');
         const testCasesSection = document.getElementById('test-cases-section');
-        const uploadSection = document.getElementById('upload-section'); // This element doesn't exist anymore with the new structure, but the functionality is merged. Let's keep the logic clean.
+        const uploadSection = document.getElementById('upload-section');
         
         const loadingGenerator = document.getElementById('loading-generator');
         const uploadStatus = document.getElementById('upload-status');
@@ -370,6 +374,110 @@
                 document.getElementById('upload-section').classList.add('hidden');
                 allTestCases = [];
                 renderAllTestCases();
+
+                // Related stories UI
+                const relatedSection = document.getElementById('related-stories-section');
+                const relatedList = document.getElementById('related-stories-list');
+                if (data.related_stories && data.related_stories.length > 0) {
+                    relatedSection.classList.remove('hidden');
+                    relatedList.innerHTML = data.related_stories.map((rel, idx) => `
+                        <div class="related-story-accordion" data-idx="${idx}" style="border:1px solid #dee2e6; border-radius:6px; margin-bottom:1em;">
+                            <div class="related-story-header" style="display:flex; align-items:center; cursor:pointer; padding:0.5em 1em 0.5em 0; padding-left:0;">
+                                <input type='checkbox' class='related-story-checkbox' id='rel-story-${idx}' data-idx='${idx}' checked style="width:50px; margin:0; padding:0; vertical-align:middle;">
+                                <label for='rel-story-${idx}' style="margin:0 0.5em 0 0.3em; font-weight:500; display:inline; vertical-align:middle;">${rel.title} <span style='color:#888; font-size:0.95em;'>(ID: ${rel.id})</span></label>
+                                <span class="related-story-toggle" style="margin-left:auto; font-size:1.2em;">&#9654;</span>
+                            </div>
+                            <div class="related-story-content" style="display:none; padding:0.5em 2em 1em 2.5em; font-size:0.97em; background:#fafbfc;">
+                                <div class="related-story-view">
+                                    <div><strong>Title:</strong> <span class="rel-title-text">${rel.title}</span></div>
+                                    <div><strong>Description:</strong> <span class="rel-desc-text">${rel.description.replace(/\n/g, '<br>')}</span></div>
+                                    <div><strong>Acceptance Criteria:</strong> <span class="rel-ac-text">${rel.acceptance_criteria && rel.acceptance_criteria.trim() ? rel.acceptance_criteria.replace(/\n/g, '<br>') : '(None)'}</span></div>
+                                    <button class="rel-edit-btn" style="margin-top:0.7em;">Edit</button>
+                                </div>
+                                <div class="related-story-edit" style="display:none;">
+                                    <div><strong>Title:</strong> <input type="text" class="rel-title-input" style="width:100%;" value="${rel.title}"></div>
+                                    <div><strong>Description:</strong> <textarea class="rel-desc-input" style="width:100%; min-height:60px;">${rel.description}</textarea></div>
+                                    <div><strong>Acceptance Criteria:</strong> <textarea class="rel-ac-input" style="width:100%; min-height:40px;">${rel.acceptance_criteria}</textarea></div>
+                                    <button class="rel-save-btn" style="margin-top:0.7em;">Save</button>
+                                    <button class="rel-cancel-btn" style="margin-top:0.7em; margin-left:0.7em;">Cancel</button>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('');
+                    // Accordion toggle logic
+                    document.querySelectorAll('.related-story-header').forEach((header, i) => {
+                        header.addEventListener('click', function(e) {
+                            // Only toggle if not clicking the checkbox
+                            if (e.target.tagName.toLowerCase() === 'input') return;
+                            const content = header.parentElement.querySelector('.related-story-content');
+                            const toggle = header.querySelector('.related-story-toggle');
+                            if (content.style.display === 'none' || !content.style.display) {
+                                content.style.display = 'block';
+                                toggle.innerHTML = '&#9660;'; // Down arrow
+                            } else {
+                                content.style.display = 'none';
+                                toggle.innerHTML = '&#9654;'; // Right arrow
+                            }
+                        });
+                    });
+                } else {
+                    relatedSection.classList.add('hidden');
+                    relatedList.innerHTML = '';
+                }
+                // Add edit/save/cancel logic for each related story
+                Array.from(document.querySelectorAll('.related-story-accordion')).forEach((accordion, idx) => {
+                    const content = accordion.querySelector('.related-story-content');
+                    const viewDiv = content.querySelector('.related-story-view');
+                    const editDiv = content.querySelector('.related-story-edit');
+                    const editBtn = content.querySelector('.rel-edit-btn');
+                    const saveBtn = content.querySelector('.rel-save-btn');
+                    const cancelBtn = content.querySelector('.rel-cancel-btn');
+                    let original = null;
+                    if (editBtn) {
+                        editBtn.addEventListener('click', function(e) {
+                            e.stopPropagation();
+                            // Save original values
+                            original = {
+                                title: editDiv.querySelector('.rel-title-input').value,
+                                desc: editDiv.querySelector('.rel-desc-input').value,
+                                ac: editDiv.querySelector('.rel-ac-input').value
+                            };
+                            viewDiv.style.display = 'none';
+                            editDiv.style.display = 'block';
+                        });
+                    }
+                    if (saveBtn) {
+                        saveBtn.addEventListener('click', function(e) {
+                            e.stopPropagation();
+                            // Update view with new values
+                            const newTitle = editDiv.querySelector('.rel-title-input').value;
+                            const newDesc = editDiv.querySelector('.rel-desc-input').value;
+                            const newAc = editDiv.querySelector('.rel-ac-input').value;
+                            viewDiv.querySelector('.rel-title-text').textContent = newTitle;
+                            viewDiv.querySelector('.rel-desc-text').innerHTML = newDesc.replace(/\n/g, '<br>');
+                            viewDiv.querySelector('.rel-ac-text').innerHTML = newAc && newAc.trim() ? newAc.replace(/\n/g, '<br>') : '(None)';
+                            // Update the data in the related_stories array
+                            data.related_stories[idx].title = newTitle;
+                            data.related_stories[idx].description = newDesc;
+                            data.related_stories[idx].acceptance_criteria = newAc;
+                            viewDiv.style.display = 'block';
+                            editDiv.style.display = 'none';
+                        });
+                    }
+                    if (cancelBtn) {
+                        cancelBtn.addEventListener('click', function(e) {
+                            e.stopPropagation();
+                            // Revert to original values
+                            if (original) {
+                                editDiv.querySelector('.rel-title-input').value = original.title;
+                                editDiv.querySelector('.rel-desc-input').value = original.desc;
+                                editDiv.querySelector('.rel-ac-input').value = original.ac;
+                            }
+                            viewDiv.style.display = 'block';
+                            editDiv.style.display = 'none';
+                        });
+                    }
+                });
             } else {
                 const error = await response.json();
                 alert('Error fetching story: ' + error.error);
@@ -383,19 +491,46 @@
             allTestCases = [];
             renderAllTestCases();
 
+            // Collect selected and edited related stories from the DOM
+            const relatedCheckboxes = document.querySelectorAll('.related-story-checkbox');
+            let selectedRelated = [];
+            relatedCheckboxes.forEach((cb) => {
+                if (cb.checked) {
+                    const accordion = cb.closest('.related-story-accordion');
+                    const content = accordion.querySelector('.related-story-content');
+                    let title, description, ac;
+                    // If in edit mode, get from inputs; else from view
+                    if (content.querySelector('.related-story-edit').style.display === 'block') {
+                        title = content.querySelector('.rel-title-input').value;
+                        description = content.querySelector('.rel-desc-input').value;
+                        ac = content.querySelector('.rel-ac-input').value;
+                    } else {
+                        title = content.querySelector('.rel-title-text').textContent;
+                        // For description and AC, get the raw text (not HTML)
+                        description = content.querySelector('.rel-desc-text').innerText;
+                        ac = content.querySelector('.rel-ac-text').innerText === '(None)' ? '' : content.querySelector('.rel-ac-text').innerText;
+                    }
+                    selectedRelated.push({
+                        title: title,
+                        description: description,
+                        acceptance_criteria: ac,
+                        id: cb.getAttribute('data-idx') // Optionally keep the index/id
+                    });
+                }
+            });
+
             const payload = {
                 story_title: document.getElementById('story-title').value,
                 story_description: document.getElementById('story-description').value,
                 acceptance_criteria: document.getElementById('acceptance-criteria').value,
-                data_dictionary: document.getElementById('data-dictionary').value
+                data_dictionary: document.getElementById('data-dictionary').value,
+                related_stories: selectedRelated
             };
 
+            fetchStory.lastData = undefined;
+            generationStatus.textContent = 'Initializing generation...';
             const eventSource = new EventSource(`/generate_test_cases?payload=${encodeURIComponent(JSON.stringify(payload))}`);
             
-            // We need to modify the backend to accept GET with payload in query string
-            
-            generationStatus.textContent = 'Initializing generation...';
-
             eventSource.onmessage = function(event) {
                 const data = JSON.parse(event.data);
                 if (data.type === 'done') {

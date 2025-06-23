@@ -1,5 +1,6 @@
-google-generativeai
-azure-devops
 Flask
 python-dotenv
+google-generativeai
+azure-devops
+msrest
 beautifulsoup4 
