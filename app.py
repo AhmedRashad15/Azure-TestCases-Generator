@@ -99,7 +99,7 @@ def fetch_story():
         return jsonify({'error': str(e)}), 500
 
 def _generate_cases_for_type(model, story_title, story_description, acceptance_criteria, data_dictionary, case_type, related_stories=None):
-    """Helper function to generate test cases for a specific type (e.g., Positive, Negative), with related stories context."""
+    print(f"DEBUG: _generate_cases_for_type called for {case_type}. related_stories:", related_stories)
     guideline_map = {
         "Positive": """
 **Positive Test Case Guidelines:**
@@ -125,11 +125,11 @@ def _generate_cases_for_type(model, story_title, story_description, acceptance_c
     
     specific_guidelines = guideline_map.get(case_type, "- Follow standard best practices for this test type.")
     related_block = ""
-    if related_stories:
-        related_block = "\n**Related User Stories:**\n" + "\n".join([
+    if related_stories and len(related_stories) > 0:
+        related_instruction = "When generating test cases, take into account not only the main user story but also the context and requirements described in the related user stories below."
+        related_block = f"\n**Instruction:** {related_instruction}\n**Related User Stories:**\n" + "\n".join([
             f"- Title: {r.get('title', '')}\n  Description: {r.get('description', '')}\n  Acceptance Criteria: {r.get('acceptance_criteria', '')}" for r in related_stories
         ])
-
     prompt = f"""
 You are an expert test case generator for Azure DevOps with a focus on comprehensive test coverage. Your task is to generate a JSON array of ONLY the **{case_type}** test cases for the user story below.
 
@@ -173,15 +173,19 @@ Now, generate ONLY the `{case_type}` test cases based on all these instructions.
 """
     try:
         response = model.generate_content(prompt)
+        print(f"Raw Gemini response for {case_type}:\n{response.text}\n--- End Response ---\n")
         # Clean the response to get a clean JSON array string
         clean_json_text = response.text.strip().replace('```json', '').replace('```', '').strip()
         return clean_json_text
     except Exception as e:
+        import traceback
         print(f"Error generating {case_type} cases: {e}")
+        traceback.print_exc()
         return "[]" # Return an empty array on error
 
 @app.route('/generate_test_cases', methods=['GET'])
 def generate_test_cases_stream():
+    print("DEBUG: /generate_test_cases endpoint called.")
     # Payload is now sent as a URL parameter
     payload_str = request.args.get('payload')
     if not payload_str:
@@ -195,6 +199,8 @@ def generate_test_cases_stream():
     data_dictionary = data.get('data_dictionary', '')
     related_stories = data.get('related_stories', [])
 
+    print("DEBUG: related_stories received in endpoint:", related_stories)
+
     if not all([story_title, acceptance_criteria]):
         return Response("Story Title and Acceptance Criteria are required.", status=400)
 
@@ -205,7 +211,7 @@ def generate_test_cases_stream():
         all_test_cases = []
 
         for case_type in case_types:
-            print(f"--- Generating {case_type} test cases... ---")
+            print(f"DEBUG: Calling _generate_cases_for_type for {case_type} with related_stories:", related_stories)
             # Generate cases for the current type
             json_text_chunk = _generate_cases_for_type(model, story_title, story_description, acceptance_criteria, data_dictionary, case_type, related_stories)
             
