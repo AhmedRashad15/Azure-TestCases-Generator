@@ -242,8 +242,8 @@ def upload_test_cases():
                 title_without_prefix = "Untitled Test Case"
         # Truncate if needed
         final_title_base = (title_without_prefix[:120] + '...') if len(title_without_prefix) > 120 else title_without_prefix
-        if not final_title_base.lower().startswith('verify that'):
-            final_title = "Verify that " + final_title_base
+        if not final_title_base.lower().startswith('verify'):
+            final_title = "Verify " + final_title_base
         else:
             final_title = final_title_base
         print(f"Final constructed title: {final_title}")
