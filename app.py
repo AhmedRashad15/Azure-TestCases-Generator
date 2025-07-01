@@ -105,22 +105,26 @@ def _generate_cases_for_type(model, story_title, story_description, acceptance_c
 **Positive Test Case Guidelines:**
 - Verify the core functionality works as expected under normal conditions.
 - Cover all acceptance criteria with at least one positive test case.
-- Test each valid input scenario from the data dictionary separately.""",
+- Test each valid input scenario from the data dictionary separately.
+- **Title Examples:** "[Positive] User successfully creates account with valid information", "[Positive] System saves data when all required fields are completed".""",
         "Negative": """
 **Negative Test Case Guidelines:**
 - Test scenarios where inputs are invalid, missing, or unexpected.
 - Create SEPARATE test cases for each type of invalid input.
-- Verify that appropriate error messages are displayed when failures occur.""",
+- Verify that appropriate error messages are displayed when failures occur.
+- **Title Examples:** "[Negative] System shows error when email field is empty", "[Negative] Application prevents login with invalid password format".""",
         "Edge Case": """
 **Edge Case & Boundary Guidelines:**
 - Test boundary conditions from the data dictionary (min/max values, etc.).
 - Include scenarios with unexpected user behavior or timing.
-- Test performance under special circumstances (e.g., large data sets, slow networks).""",
+- Test performance under special circumstances (e.g., large data sets, slow networks).
+- **Title Examples:** "[Edge Case] System handles maximum character limit in description field", "[Edge Case] Application maintains functionality during network interruption".""",
         "Data Flow": """
 **Data Flow Guidelines:**
 - Verify how data moves through the system from input to storage and output.
 - Track data through an entire workflow to verify integrity.
-- Test data persistence (saving) and retrieval (loading)."""
+- Test data persistence (saving) and retrieval (loading).
+- **Title Examples:** "[Data Flow] User data persists correctly through complete registration workflow", "[Data Flow] System maintains data integrity when transferring between modules"."""
     }
     
     specific_guidelines = guideline_map.get(case_type, "- Follow standard best practices for this test type.")
@@ -141,8 +145,9 @@ You are an expert test case generator for Azure DevOps with a focus on comprehen
 {related_block}
 
 **Universal Guidelines:**
-1. **Consistency First:** For any '{case_type}' test, the `title`, `description`, and `expectedResult` must all be consistent with that scenario. For example, a 'Negative' test's title must describe a failure condition, and its expected result must describe the correct error handling.
-2. **Single Condition:** Each test case must focus on verifying exactly ONE condition or scenario. Do not combine multiple test conditions.
+1. **Descriptive Titles:** Create specific, action-oriented titles that clearly describe what functionality is being tested. Avoid generic titles like "Test login" - instead use "User can successfully login with valid email and password".
+2. **Consistency First:** For any '{case_type}' test, the `title`, `description`, and `expectedResult` must all be consistent with that scenario. For example, a 'Negative' test's title must describe a failure condition, and its expected result must describe the correct error handling.
+3. **Single Condition:** Each test case must focus on verifying exactly ONE condition or scenario. Do not combine multiple test conditions.
 
 **Mobile Application Guidelines (Apply if context is a mobile app):**
 - If a scenario applies to both iOS and Android, write a single, consolidated test case.
@@ -156,7 +161,12 @@ You are an expert test case generator for Azure DevOps with a focus on comprehen
 **JSON Output Format:**
 Each test case in the JSON array must have the following fields:
 - `id`: A unique identifier following the convention for the test type (e.g., "TC-POS-1", "TC-NEG-1").
-- `title`: A clear and descriptive title, including the type of test (e.g., "[Positive]").
+- `title`: A clear and descriptive title that specifically describes what is being tested. The title should:
+  * Be concise but descriptive (aim for 60-100 characters)
+  * Clearly indicate the specific functionality or scenario being tested
+  * Include the type of test in brackets (e.g., "[Positive]", "[Negative]", "[Edge Case]", "[Data Flow]")
+  * Use action-oriented language that describes the expected behavior
+  * Examples: "[Positive] User can successfully login with valid credentials", "[Negative] System displays error when required field is empty", "[Edge Case] Application handles maximum character limit in text field"
 - `priority`: "High", "Medium", or "Low".
 - `description`: A numbered list of steps, e.g., "1. Step one.\\n2. Step two.".
 - `expectedResult`: A specific and verifiable outcome.
