@@ -55,9 +55,8 @@ class AzureDevOpsService {
       const descriptionHtml = fields["System.Description"] || "";
       const acceptanceCriteriaHtml = fields["Microsoft.VSTS.Common.AcceptanceCriteria"] || "";
 
-      // Convert HTML to text, but preserve images for acceptance criteria
-      const description = this.htmlToText(descriptionHtml);
-      // Keep HTML for acceptance criteria to preserve images
+      // Keep HTML for description and acceptance criteria to preserve images
+      const description = descriptionHtml || "";
       const acceptance_criteria = acceptanceCriteriaHtml || "";
 
       // Fetch related stories

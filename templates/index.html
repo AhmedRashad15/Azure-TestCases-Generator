@@ -368,21 +368,29 @@
             <input type="text" id="story-title" name="story_title">
 
             <label for="story-description">Description:</label>
-            <textarea id="story-description" name="story_description"></textarea>
+            <div id="story-description" 
+                 contenteditable="true" 
+                 class="rich-text-editor"
+                 style="min-height: 120px; padding: 8px; border: 1px solid var(--border-color); border-radius: var(--border-radius); background-color: #ffffff; outline: none; white-space: pre-wrap; word-wrap: break-word; overflow-y: auto;"
+                 data-placeholder="Enter story description..."></div>
 
             <label for="acceptance-criteria">Acceptance Criteria:</label>
             <div id="acceptance-criteria" 
                  contenteditable="true" 
                  class="rich-text-editor"
                  style="min-height: 120px; padding: 8px; border: 1px solid var(--border-color); border-radius: var(--border-radius); background-color: #ffffff; outline: none; white-space: pre-wrap; word-wrap: break-word; overflow-y: auto;"
-                 data-placeholder="Paste acceptance criteria here. You can paste images (screenshots) directly..."></div>
+                 data-placeholder="Enter acceptance criteria..."></div>
 
             <div id="related-stories-section" class="hidden">
                 <h3>Related User Stories</h3>
                 <div id="related-stories-list"></div>
             </div>
             <label for="data-dictionary">Data Dictionary (Optional):</label>
-            <textarea id="data-dictionary" name="data_dictionary"></textarea>
+            <div id="data-dictionary" 
+                 contenteditable="true" 
+                 class="rich-text-editor"
+                 style="min-height: 120px; padding: 8px; border: 1px solid var(--border-color); border-radius: var(--border-radius); background-color: #ffffff; outline: none; white-space: pre-wrap; word-wrap: break-word; overflow-y: auto;"
+                 data-placeholder="Enter data dictionary information..."></div>
 
             <button id="analyze-story-btn">Analyze User Story</button>
             <div id="loading-analysis" class="hidden">
@@ -459,14 +467,16 @@
         testCasesContainer.addEventListener('click', handleCardClick);
         testCasesContainer.addEventListener('input', updateTestCaseData);
         
-        // Initialize rich text editor on page load
+        // Initialize all rich text editors on page load
         document.addEventListener('DOMContentLoaded', function() {
-            initializeRichTextEditor();
+            initializeRichTextEditor('story-description');
+            initializeRichTextEditor('acceptance-criteria');
+            initializeRichTextEditor('data-dictionary');
         });
 
-        // Initialize Rich Text Editor for Acceptance Criteria
-        function initializeRichTextEditor() {
-            const editor = document.getElementById('acceptance-criteria');
+        // Initialize Rich Text Editors for Description, Acceptance Criteria, and Data Dictionary
+        function initializeRichTextEditor(editorId) {
+            const editor = document.getElementById(editorId);
             if (!editor) return;
 
             // Handle paste events
@@ -632,24 +642,32 @@
             });
         }
 
-        // Helper function to get HTML content from rich text editor
-        function getAcceptanceCriteria() {
-            const editor = document.getElementById('acceptance-criteria');
+        // Helper functions to get HTML content from rich text editors
+        function getEditorValue(editorId) {
+            const editor = document.getElementById(editorId);
             if (editor && editor.contentEditable === 'true') {
                 return editor.innerHTML;
             }
             return editor ? editor.value : '';
         }
 
-        // Helper function to set HTML content in rich text editor
-        function setAcceptanceCriteria(html) {
-            const editor = document.getElementById('acceptance-criteria');
+        // Helper functions to set HTML content in rich text editors
+        function setEditorValue(editorId, html) {
+            const editor = document.getElementById(editorId);
             if (editor && editor.contentEditable === 'true') {
                 editor.innerHTML = html || '';
             } else if (editor) {
                 editor.value = html || '';
             }
         }
+
+        // Convenience functions for specific editors
+        function getDescription() { return getEditorValue('story-description'); }
+        function setDescription(html) { setEditorValue('story-description', html); }
+        function getAcceptanceCriteria() { return getEditorValue('acceptance-criteria'); }
+        function setAcceptanceCriteria(html) { setEditorValue('acceptance-criteria', html); }
+        function getDataDictionary() { return getEditorValue('data-dictionary'); }
+        function setDataDictionary(html) { setEditorValue('data-dictionary', html); }
 
         async function fetchStory() {
             const storyId = document.getElementById('user-story-id').value;
@@ -682,7 +700,7 @@
             if (response.ok) {
                 const data = await response.json();
                 document.getElementById('story-title').value = data.title;
-                document.getElementById('story-description').value = data.description;
+                setDescription(data.description || '');
                 setAcceptanceCriteria(data.acceptance_criteria || '');
                 storyDetails.classList.remove('hidden');
                 storyAnalysisSection.classList.add('hidden');
@@ -851,9 +869,9 @@
 
             const payload = {
                 story_title: document.getElementById('story-title').value,
-                story_description: document.getElementById('story-description').value,
+                story_description: extractTextFromHtml(getDescription()),
                 acceptance_criteria: extractTextFromHtml(getAcceptanceCriteria()),
-                data_dictionary: document.getElementById('data-dictionary').value,
+                data_dictionary: extractTextFromHtml(getDataDictionary()),
                 related_stories: selectedRelated
             };
 
@@ -888,8 +906,7 @@
 
         async function analyzeStory() {
             const storyTitle = document.getElementById('story-title').value;
-            const storyDescription = document.getElementById('story-description').value;
-            // Extract text from HTML for acceptance criteria
+            // Extract text from HTML for all rich text fields
             function extractTextFromHtml(html) {
                 if (!html) return '';
                 const div = document.createElement('div');
@@ -902,6 +919,7 @@
                 });
                 return div.textContent || div.innerText || '';
             }
+            const storyDescription = extractTextFromHtml(getDescription());
             const acceptanceCriteria = extractTextFromHtml(getAcceptanceCriteria());
             
             if (!storyTitle) {

@@ -62,6 +62,7 @@ class ApiService {
     const headers = await this.getHeaders();
 
     // Extract text from HTML to avoid sending large base64 image data
+    const storyDescriptionText = this.extractTextFromHtml(storyDescription);
     const acceptanceCriteriaText = this.extractTextFromHtml(acceptanceCriteria);
 
     const response = await fetch(`${API_BASE_URL}/analyze_story`, {
@@ -69,7 +70,7 @@ class ApiService {
       headers,
       body: JSON.stringify({
         story_title: storyTitle,
-        story_description: storyDescription,
+        story_description: storyDescriptionText,
         acceptance_criteria: acceptanceCriteriaText,
         related_test_cases: relatedTestCases,
       }),
@@ -94,13 +95,15 @@ class ApiService {
     const headers = await this.getHeaders();
 
     // Extract text from HTML to avoid sending large base64 image data
+    const storyDescriptionText = this.extractTextFromHtml(storyDescription);
     const acceptanceCriteriaText = this.extractTextFromHtml(acceptanceCriteria);
+    const dataDictionaryText = this.extractTextFromHtml(dataDictionary);
 
     const payload = {
       story_title: storyTitle,
-      story_description: storyDescription,
+      story_description: storyDescriptionText,
       acceptance_criteria: acceptanceCriteriaText,
-      data_dictionary: dataDictionary,
+      data_dictionary: dataDictionaryText,
       related_stories: relatedStories,
     };
 

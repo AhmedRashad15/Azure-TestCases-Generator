@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import apiService from "../services/apiService";
 import azureDevOpsService, { WorkItem, TestCase } from "../services/azureDevOpsService";
+import RichTextEditor from "./RichTextEditor";
 
 interface TestCaseGeneratorProps {
   storyData: WorkItem;
@@ -96,10 +97,10 @@ const TestCaseGenerator: React.FC<TestCaseGeneratorProps> = ({
     <div>
       <div>
         <label htmlFor="data-dictionary">Data Dictionary (Optional):</label>
-        <textarea
-          id="data-dictionary"
+        <RichTextEditor
           value={dataDictionary}
-          onChange={(e) => setDataDictionary(e.target.value)}
+          onChange={(html) => setDataDictionary(html)}
+          readOnly={false}
           placeholder="Enter data dictionary information..."
         />
       </div>

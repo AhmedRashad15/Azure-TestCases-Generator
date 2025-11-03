@@ -44,7 +44,15 @@ const App: React.FC = () => {
               <input type="text" value={storyData.title} readOnly />
               
               <label>Description:</label>
-              <textarea value={storyData.description} readOnly />
+              <RichTextEditor
+                value={storyData.description}
+                onChange={(html) => {
+                  // Update story data with new description
+                  setStoryData({ ...storyData, description: html });
+                }}
+                readOnly={false}
+                placeholder="Enter story description..."
+              />
               
               <label>Acceptance Criteria:</label>
               <RichTextEditor
@@ -55,7 +63,7 @@ const App: React.FC = () => {
                   setStoryData({ ...storyData, acceptance_criteria: html });
                 }}
                 readOnly={false}
-                placeholder="Paste acceptance criteria here. You can paste images (screenshots) directly..."
+                placeholder="Enter acceptance criteria..."
               />
             </div>
           </div>
