@@ -864,31 +864,71 @@
 
             fetchStory.lastData = undefined;
             generationStatus.textContent = 'Initializing generation...';
-            const eventSource = new EventSource(`/generate_test_cases?payload=${encodeURIComponent(JSON.stringify(payload))}`);
             
-            eventSource.onmessage = function(event) {
-                const data = JSON.parse(event.data);
-                if (data.type === 'done') {
-                    generationStatus.textContent = data.message;
-                    eventSource.close();
-                    loadingGenerator.classList.add('hidden');
-                    generateCasesBtn.disabled = false;
-                } else {
-                    generationStatus.textContent = data.progress;
-                    allTestCases.push(...data.cases);
-                    renderAllTestCases();
-                    testCasesSection.classList.remove('hidden');
-                    document.getElementById('upload-section').classList.remove('hidden');
+            // Use POST instead of GET to avoid URL length limits with images
+            fetch('/generate_test_cases', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
-            };
-
-            eventSource.onerror = function(err) {
-                console.error("EventSource failed:", err);
+                
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                
+                function readStream() {
+                    reader.read().then(({ done, value }) => {
+                        if (done) {
+                            return;
+                        }
+                        
+                        const chunk = decoder.decode(value, { stream: true });
+                        const lines = chunk.split('\n\n');
+                        
+                        for (const line of lines) {
+                            if (line.startsWith('data: ')) {
+                                try {
+                                    const data = JSON.parse(line.substring(6));
+                                    if (data.type === 'done') {
+                                        generationStatus.textContent = data.message;
+                                        loadingGenerator.classList.add('hidden');
+                                        generateCasesBtn.disabled = false;
+                                        return;
+                                    } else {
+                                        generationStatus.textContent = data.progress;
+                                        allTestCases.push(...data.cases);
+                                        renderAllTestCases();
+                                        testCasesSection.classList.remove('hidden');
+                                        document.getElementById('upload-section').classList.remove('hidden');
+                                    }
+                                } catch (e) {
+                                    console.error('Error parsing SSE data:', e);
+                                }
+                            }
+                        }
+                        
+                        readStream();
+                    }).catch(err => {
+                        console.error("Stream reading failed:", err);
+                        generationStatus.textContent = 'An error occurred during generation.';
+                        loadingGenerator.classList.add('hidden');
+                        generateCasesBtn.disabled = false;
+                    });
+                }
+                
+                readStream();
+            })
+            .catch(err => {
+                console.error("Fetch failed:", err);
                 generationStatus.textContent = 'An error occurred during generation.';
-                eventSource.close();
                 loadingGenerator.classList.add('hidden');
                 generateCasesBtn.disabled = false;
-            };
+            });
         }
 
         async function analyzeStory() {

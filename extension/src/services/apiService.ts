@@ -102,37 +102,73 @@ class ApiService {
       related_stories: relatedStories,
     };
 
-    // Use EventSource for streaming if backend supports it
-    // Otherwise use regular fetch
+    // Use POST with streaming to support large payloads (images)
     return new Promise((resolve, reject) => {
-      const eventSource = new EventSource(
-        `${API_BASE_URL}/generate_test_cases?payload=${encodeURIComponent(JSON.stringify(payload))}`
-      );
-
       const allTestCases: any[] = [];
 
-      eventSource.onmessage = (event) => {
-        try {
-          const data: GenerateTestCasesResponse = JSON.parse(event.data);
-
-          if (data.type === "done") {
-            eventSource.close();
-            resolve(allTestCases);
-          } else if (data.cases) {
-            allTestCases.push(...data.cases);
-            if (onProgress) {
-              onProgress(data);
-            }
+      fetch(`${API_BASE_URL}/generate_test_cases`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+      })
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
           }
-        } catch (error) {
-          console.error("Error parsing SSE message:", error);
-        }
-      };
 
-      eventSource.onerror = (error) => {
-        eventSource.close();
-        reject(new Error("Failed to generate test cases: " + error));
-      };
+          const reader = response.body?.getReader();
+          if (!reader) {
+            throw new Error('Response body is not readable');
+          }
+
+          const decoder = new TextDecoder();
+
+          function readStream() {
+            reader
+              .read()
+              .then(({ done, value }) => {
+                if (done) {
+                  resolve(allTestCases);
+                  return;
+                }
+
+                const chunk = decoder.decode(value, { stream: true });
+                const lines = chunk.split('\n\n');
+
+                for (const line of lines) {
+                  if (line.startsWith('data: ')) {
+                    try {
+                      const data: GenerateTestCasesResponse = JSON.parse(
+                        line.substring(6)
+                      );
+
+                      if (data.type === 'done') {
+                        resolve(allTestCases);
+                        return;
+                      } else if (data.cases) {
+                        allTestCases.push(...data.cases);
+                        if (onProgress) {
+                          onProgress(data);
+                        }
+                      }
+                    } catch (error) {
+                      console.error('Error parsing SSE data:', error);
+                    }
+                  }
+                }
+
+                readStream();
+              })
+              .catch((error) => {
+                reject(new Error('Failed to generate test cases: ' + error));
+              });
+          }
+
+          readStream();
+        })
+        .catch((error) => {
+          reject(new Error('Failed to generate test cases: ' + error));
+        });
     });
   }
 }
