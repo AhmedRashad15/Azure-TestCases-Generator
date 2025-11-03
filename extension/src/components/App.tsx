@@ -46,7 +46,7 @@ const App: React.FC = () => {
               <label>Description:</label>
               <textarea value={storyData.description} readOnly />
               
-              <label>Acceptance Criteria (you can paste images here):</label>
+              <label>Acceptance Criteria:</label>
               <RichTextEditor
                 value={editableAcceptanceCriteria || storyData.acceptance_criteria}
                 onChange={(html) => {
