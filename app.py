@@ -12,6 +12,8 @@ import ast
 import html
 import unicodedata
 import string
+import base64
+import requests
 
 # Load environment variables from .env file
 load_dotenv()
@@ -57,12 +59,17 @@ def fetch_story():
         
         fields = work_item.fields
         
-        # Description and Acceptance Criteria can be HTML, so we parse them to get plain text.
+        # Description and Acceptance Criteria are HTML, preserve them to keep images
         description_html = fields.get('System.Description', '')
         acceptance_criteria_html = fields.get('Microsoft.VSTS.Common.AcceptanceCriteria', '')
         
-        description_text = BeautifulSoup(description_html, "html.parser").get_text(separator="\n").strip()
-        acceptance_criteria_text = BeautifulSoup(acceptance_criteria_html, "html.parser").get_text(separator="\n").strip()
+        # Convert Azure DevOps image URLs to base64 data URLs
+        description_html = convert_azure_devops_images_to_base64(description_html, azure_devops_org_url, azure_devops_pat)
+        acceptance_criteria_html = convert_azure_devops_images_to_base64(acceptance_criteria_html, azure_devops_org_url, azure_devops_pat)
+        
+        # Keep HTML for rich text editor (preserves images)
+        description_text = description_html
+        acceptance_criteria_text = acceptance_criteria_html
 
         # Fetch related user stories (work item links)
         related_stories = []
@@ -200,15 +207,27 @@ Now, generate ONLY the `{case_type}` test cases based on all these instructions.
         traceback.print_exc()
         return "[]" # Return an empty array on error
 
-@app.route('/generate_test_cases', methods=['GET'])
+@app.route('/generate_test_cases', methods=['POST', 'GET'])
 def generate_test_cases_stream():
     print("DEBUG: /generate_test_cases endpoint called.")
-    # Payload is now sent as a URL parameter
-    payload_str = request.args.get('payload')
-    if not payload_str:
-        return Response("Payload missing.", status=400)
     
-    data = json.loads(unquote(payload_str))
+    # Support both GET (legacy) and POST (for large payloads with images)
+    if request.method == 'POST':
+        try:
+            data = request.json or {}
+            if not data:
+                return Response("Payload missing.", status=400)
+        except Exception as e:
+            return Response(f"Invalid JSON payload: {str(e)}", status=400), 400
+    else:
+        # GET request (legacy support)
+        payload_str = request.args.get('payload')
+        if not payload_str:
+            return Response("Payload missing.", status=400)
+        try:
+            data = json.loads(unquote(payload_str))
+        except json.JSONDecodeError as e:
+            return Response(f"Invalid payload: {str(e)}", status=400), 400
 
     story_title = data.get('story_title')
     story_description = data.get('story_description', '')
@@ -252,7 +271,13 @@ def generate_test_cases_stream():
         print("--- Finished generating all test cases. ---")
         yield "data: {\"type\": \"done\", \"message\": \"All test cases generated.\"}\n\n"
 
-    return Response(generate(), mimetype='text/event-stream')
+    response = Response(generate(), mimetype='text/event-stream')
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+    response.headers['Cache-Control'] = 'no-cache'
+    response.headers['X-Accel-Buffering'] = 'no'  # Disable buffering for nginx
+    return response
 
 @app.route('/upload_test_cases', methods=['POST'])
 def upload_test_cases():
@@ -429,7 +454,17 @@ def analyze_story():
             print("ERROR: Story title is missing")
             return jsonify({'error': 'Story Title is required.'}), 400
         
-        model = genai.GenerativeModel('gemini-flash-latest')
+        model = genai.GenerativeModel('gemini-1.5-flash')  # Use model that supports images
+        
+        # Extract images and text from HTML fields (if HTML is provided)
+        # Note: app.py receives plain text, so images would need to be extracted if HTML is sent
+        # For now, we'll use the text as-is, but prepare for potential image extraction
+        desc_text = story_description
+        ac_text = acceptance_criteria
+        
+        # Check if description/acceptance_criteria might contain HTML with images
+        # If HTML is detected, we could extract images here similar to app_api.py
+        # For now, assuming text format, but the prompt will handle images if provided
         
         # Build the prompt for analysis
         test_cases_section = ""
@@ -442,9 +477,36 @@ Your task is to review the following user story (and related test cases if avail
 
 **USER STORY:**
 **Title:** {story_title}
-**Description:** {story_description}
-**Acceptance Criteria:** {acceptance_criteria}
+**Description:** {desc_text}
+**Acceptance Criteria:** {ac_text}
 {test_cases_section}
+
+**IMPORTANT ANALYSIS INSTRUCTIONS:**
+
+1. **Acceptance Criteria Analysis:**
+   - Review EACH individual rule, requirement, and condition stated in the acceptance criteria
+   - Break down each acceptance criterion into its component parts
+   - Check for completeness: Does each rule have enough detail to implement?
+   - Check for testability: Can each rule be verified with clear pass/fail criteria?
+   - Check for conflicts: Are there any contradictory requirements?
+   - Check for missing information: What data, validation rules, error messages, or edge cases are not specified?
+
+2. **Image Analysis (if images are provided):**
+   - Carefully examine ALL images included with this user story
+   - Analyze visual elements: UI components, layouts, workflows, diagrams, screenshots
+   - Compare images with text requirements: Do images match what's described in text?
+   - Identify visual ambiguities: 
+     * Are there UI elements shown in images that aren't mentioned in acceptance criteria?
+     * Are there visual states (hover, focus, error) not defined in text?
+     * Are there design specifications (colors, sizes, spacing) visible but not documented?
+     * Are there workflow steps shown visually that aren't explicitly stated?
+   - Check for discrepancies: Do images contradict the written acceptance criteria?
+   - Note missing visuals: Are critical UI states, error cases, or edge scenarios not shown in images?
+
+3. **Cross-Reference Check:**
+   - Compare images with acceptance criteria rules
+   - Ensure every visible element in images has corresponding acceptance criteria
+   - Ensure every acceptance criteria rule is reflected (if applicable) in images
 
 Please analyze and respond using the structure below.
 
@@ -463,10 +525,19 @@ Keep these as **short, clear bullet points**.
 ---
 
 ### 🟨 3. Ambiguities & Clarification Questions
-Identify any unclear, missing, or ambiguous parts of the user story.  
-For each one, provide:
-- **Ambiguity:** short description of what's unclear  
-- **Question:** the specific question that should be asked to the Product Owner to clarify this
+**CRITICAL: You must thoroughly analyze EACH acceptance criteria rule AND ALL provided images.**
+
+For each ambiguity found, provide:
+- **Source:** Specify whether the ambiguity comes from "Acceptance Criteria Rule #X", "Image Analysis", or "Text vs Image Comparison"
+- **Ambiguity:** Clear description of what's unclear, missing, or contradictory
+- **Question:** Specific question to ask the Product Owner to clarify this
+
+Analyze:
+- Every acceptance criteria rule individually for completeness and clarity
+- All images for visual elements not documented in text
+- Any discrepancies between images and written requirements
+- Missing information in acceptance criteria that images reveal
+- UI states, validations, error handling, edge cases not explicitly stated
 
 Keep this section clear and easy to read — one ambiguity and one question per bullet point.
 
@@ -515,10 +586,15 @@ Here is the preferred HTML structure template (use this for formatting your resp
 
   <h2 class="header yellow">3. Ambiguities & Clarification Questions</h2>
   <ul>
-    <li><b>Ambiguity:</b> No email content defined.<br>
+    <li><b>Source:</b> Acceptance Criteria Rule #1<br>
+        <b>Ambiguity:</b> No email content defined.<br>
         <b>Question:</b> What should the reset email include?</li>
-    <li><b>Ambiguity:</b> No mention of link expiration.<br>
+    <li><b>Source:</b> Acceptance Criteria Rule #2<br>
+        <b>Ambiguity:</b> No mention of link expiration.<br>
         <b>Question:</b> How long should the reset link remain valid?</li>
+    <li><b>Source:</b> Image Analysis<br>
+        <b>Ambiguity:</b> Image shows a "Cancel" button that is not mentioned in acceptance criteria.<br>
+        <b>Question:</b> Should users be able to cancel the password reset process?</li>
   </ul>
 
   <h2 class="header orange">4. Recommendations</h2>
@@ -532,6 +608,15 @@ Here is the preferred HTML structure template (use this for formatting your resp
 - Return ONLY the HTML code, starting with `<div class="review-container">` and ending with `</div>`.
 - Do NOT include markdown formatting, code blocks with triple backticks, or any text outside the HTML structure.
 - Make sure all HTML is properly formatted and ready to be inserted directly into a webpage.
+
+**IMAGES PROVIDED:**
+If images are included with the user story (either embedded in HTML or provided separately), you MUST:
+1. Examine each image carefully for visual requirements, UI elements, workflows, and states
+2. Compare what you see in images against the acceptance criteria rules
+3. Identify any visual elements, UI states, or design specifications shown in images that are NOT documented in the acceptance criteria
+4. Note any discrepancies between images and written requirements
+5. Flag missing visual documentation (error states, edge cases, different screen sizes, etc.)
+6. Reference specific images when identifying ambiguities (e.g., "In Image 1, there is a [element] that is not mentioned in acceptance criteria...")
 """
         
         print(f"DEBUG: Calling Gemini API for analysis...")
@@ -592,6 +677,72 @@ Here is the preferred HTML structure template (use this for formatting your resp
         print(f"Error generating analysis: {e}")
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
+
+def convert_azure_devops_images_to_base64(html_content, org_url, pat_token):
+    """Convert Azure DevOps image URLs to base64 data URLs for display in rich text editor"""
+    if not html_content:
+        return html_content
+    
+    soup = BeautifulSoup(html_content, 'html.parser')
+    images = soup.find_all('img')
+    
+    for img in images:
+        src = img.get('src', '')
+        if not src:
+            continue
+        
+        # Skip if already a data URL
+        if src.startswith('data:image'):
+            continue
+        
+        try:
+            image_url = src
+            
+            # Convert vstfs:// URLs to REST API URLs
+            if src.startswith('vstfs:///'):
+                # Extract attachment ID from vstfs URL
+                # vstfs:///Attachments/Attachments/[attachment-id]/filename
+                match = re.match(r'/Attachments/([^/]+)', src)
+                if match and match.group(1):
+                    attachment_id = match.group(1)
+                    filename = img.get('alt', 'image.png')
+                    image_url = f"{org_url}/_apis/wit/attachments/{attachment_id}?fileName={filename}"
+                else:
+                    print(f"WARNING: Could not parse vstfs URL: {src}")
+                    continue
+            
+            # Make relative URLs absolute
+            if image_url.startswith('/'):
+                image_url = f"{org_url}{image_url}"
+            
+            # Only process Azure DevOps URLs (skip external URLs)
+            if not ('/_apis/' in image_url or 'visualstudio.com' in image_url or 'dev.azure.com' in image_url):
+                continue
+            
+            # Fetch image and convert to base64
+            headers = {
+                'Authorization': f'Basic {base64.b64encode(f":{pat_token}".encode()).decode()}'
+            }
+            response = requests.get(image_url, headers=headers, timeout=10)
+            
+            if response.status_code == 200:
+                # Determine content type
+                content_type = response.headers.get('Content-Type', 'image/png')
+                if not content_type.startswith('image/'):
+                    content_type = 'image/png'
+                
+                # Convert to base64
+                image_base64 = base64.b64encode(response.content).decode('utf-8')
+                data_url = f"data:{content_type};base64,{image_base64}"
+                img['src'] = data_url
+                print(f"Successfully converted Azure DevOps image to base64")
+            else:
+                print(f"WARNING: Failed to fetch Azure DevOps image: {image_url} (Status: {response.status_code})")
+        except Exception as e:
+            print(f"ERROR: Failed to convert Azure DevOps image to base64: {e}")
+            # Keep original URL as fallback
+    
+    return str(soup)
 
 @app.route('/test_error')
 def test_error():

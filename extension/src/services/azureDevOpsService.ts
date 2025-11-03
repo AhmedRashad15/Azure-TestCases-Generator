@@ -55,9 +55,9 @@ class AzureDevOpsService {
       const descriptionHtml = fields["System.Description"] || "";
       const acceptanceCriteriaHtml = fields["Microsoft.VSTS.Common.AcceptanceCriteria"] || "";
 
-      // Keep HTML for description and acceptance criteria to preserve images
-      const description = descriptionHtml || "";
-      const acceptance_criteria = acceptanceCriteriaHtml || "";
+      // Convert Azure DevOps image URLs to base64 data URLs for display
+      const description = await this.convertAzureDevOpsImagesToDataUrls(descriptionHtml, orgUrl, accessToken);
+      const acceptance_criteria = await this.convertAzureDevOpsImagesToDataUrls(acceptanceCriteriaHtml, orgUrl, accessToken);
 
       // Fetch related stories
       const related_stories: RelatedStory[] = [];
@@ -131,6 +131,96 @@ class AzureDevOpsService {
     const div = document.createElement("div");
     div.innerHTML = html;
     return div.textContent || div.innerText || "";
+  }
+
+  /**
+   * Convert Azure DevOps image URLs (vstfs:// or attachment URLs) to base64 data URLs
+   * This allows images from Azure DevOps work items to be displayed in our rich text editors
+   */
+  private async convertAzureDevOpsImagesToDataUrls(
+    html: string,
+    orgUrl: string,
+    accessToken: string
+  ): Promise<string> {
+    if (!html) return html;
+
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, "text/html");
+    const images = doc.querySelectorAll("img");
+
+    for (const img of Array.from(images)) {
+      const src = img.getAttribute("src");
+      if (!src) continue;
+
+      try {
+        // Check if it's already a data URL
+        if (src.startsWith("data:image")) {
+          continue; // Already in the right format
+        }
+
+        // Handle Azure DevOps attachment URLs
+        // Format 1: vstfs:///Attachments/... (needs conversion to REST API URL)
+        // Format 2: https://.../_apis/wit/attachments/... (direct REST API URL)
+        let imageUrl = src;
+
+        // Convert vstfs:// URLs to REST API URLs
+        if (src.startsWith("vstfs:///")) {
+          // Extract attachment ID from vstfs URL
+          // vstfs:///Attachments/Attachments/[attachment-id]/filename
+          const match = src.match(/\/Attachments\/([^\/]+)/);
+          if (match && match[1]) {
+            const attachmentId = match[1];
+            imageUrl = `${orgUrl}/_apis/wit/attachments/${attachmentId}?fileName=${encodeURIComponent(
+              img.getAttribute("alt") || "image.png"
+            )}`;
+          } else {
+            console.warn("Could not parse vstfs URL:", src);
+            continue;
+          }
+        }
+
+        // If it's a relative URL, make it absolute
+        if (imageUrl.startsWith("/")) {
+          imageUrl = `${orgUrl}${imageUrl}`;
+        }
+
+        // Only process Azure DevOps URLs (skip external URLs)
+        if (!imageUrl.includes("/_apis/") && !imageUrl.includes("visualstudio.com") && !imageUrl.includes("dev.azure.com")) {
+          console.log("Skipping external image URL:", imageUrl);
+          continue;
+        }
+
+        // Fetch the image and convert to base64
+        const imageResponse = await fetch(imageUrl, {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        });
+
+        if (imageResponse.ok) {
+          const blob = await imageResponse.blob();
+          const reader = new FileReader();
+          
+          await new Promise<void>((resolve, reject) => {
+            reader.onloadend = () => {
+              const base64data = reader.result as string;
+              img.setAttribute("src", base64data);
+              resolve();
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          });
+        } else {
+          console.warn("Failed to fetch Azure DevOps image:", imageUrl, imageResponse.status);
+          // Keep original URL as fallback
+        }
+      } catch (error) {
+        console.error("Error converting Azure DevOps image to data URL:", error);
+        // Keep original URL as fallback
+      }
+    }
+
+    return doc.documentElement.innerHTML;
   }
 
   async uploadTestCases(

@@ -5,4 +5,5 @@ google-generativeai
 azure-devops
 msrest
 beautifulsoup4
-Pillow 
+Pillow
+requests 
