@@ -169,7 +169,7 @@ def analyze_story():
             print("ERROR: Story title is missing")
             return jsonify({'error': 'Story Title is required.'}), 400
         
-        model = genai.GenerativeModel('gemini-1.5-flash')  # Use model that supports images
+        model = genai.GenerativeModel('gemini-flash-latest')  # Free tier model that supports images
         
         # Extract images and text from HTML fields
         desc_images, desc_text = extract_images_from_html(story_description)
@@ -241,7 +241,6 @@ Keep these as **short, clear bullet points**.
 **CRITICAL: You must thoroughly analyze EACH acceptance criteria rule AND ALL provided images.**
 
 For each ambiguity found, provide:
-- **Source:** Specify whether the ambiguity comes from "Acceptance Criteria Rule #X", "Image Analysis", or "Text vs Image Comparison"
 - **Ambiguity:** Clear description of what's unclear, missing, or contradictory
 - **Question:** Specific question to ask the Product Owner to clarify this
 
@@ -299,14 +298,11 @@ Here is the preferred HTML structure template (use this for formatting your resp
 
   <h2 class="header yellow">3. Ambiguities & Clarification Questions</h2>
   <ul>
-    <li><b>Source:</b> Acceptance Criteria Rule #1<br>
-        <b>Ambiguity:</b> No email content defined.<br>
+    <li><b>Ambiguity:</b> No email content defined.<br>
         <b>Question:</b> What should the reset email include?</li>
-    <li><b>Source:</b> Acceptance Criteria Rule #2<br>
-        <b>Ambiguity:</b> No mention of link expiration.<br>
+    <li><b>Ambiguity:</b> No mention of link expiration.<br>
         <b>Question:</b> How long should the reset link remain valid?</li>
-    <li><b>Source:</b> Image Analysis<br>
-        <b>Ambiguity:</b> Image shows a "Cancel" button that is not mentioned in acceptance criteria.<br>
+    <li><b>Ambiguity:</b> Image shows a "Cancel" button that is not mentioned in acceptance criteria.<br>
         <b>Question:</b> Should users be able to cancel the password reset process?</li>
   </ul>
 
@@ -547,7 +543,7 @@ def generate_test_cases_stream():
         if not all([story_title, acceptance_criteria]):
             return Response("Story Title and Acceptance Criteria are required.", status=400)
         
-        model = genai.GenerativeModel('gemini-1.5-flash')  # Use model that supports images
+        model = genai.GenerativeModel('gemini-flash-latest')  # Free tier model that supports images
         
         # Extract images and text from HTML fields
         desc_images, desc_text = extract_images_from_html(story_description)
