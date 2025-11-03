@@ -69,6 +69,12 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
                   selection?.addRange(range);
                 } else {
                   // Just append if no selection
+                  const img = document.createElement("img");
+                  img.src = imageDataUrl;
+                  img.style.maxWidth = "100%";
+                  img.style.height = "auto";
+                  img.style.display = "block";
+                  img.style.margin = "10px 0";
                   editorRef.current.appendChild(img);
                 }
                 
