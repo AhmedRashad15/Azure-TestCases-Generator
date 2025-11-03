@@ -301,6 +301,42 @@
             font-weight: 600;
         }
 
+        /* Rich Text Editor Styles */
+        .rich-text-editor {
+            font-family: 'Poppins', sans-serif;
+            font-size: 14px;
+            line-height: 1.5;
+            color: var(--text-color);
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .rich-text-editor:hover {
+            border-color: var(--primary-color);
+        }
+
+        .rich-text-editor:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.2);
+            outline: none;
+        }
+
+        .rich-text-editor img {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 10px 0;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            border: 1px solid #ddd;
+        }
+
+        .rich-text-editor[data-placeholder]:empty:before {
+            content: attr(data-placeholder);
+            color: #999;
+            font-style: italic;
+            pointer-events: none;
+        }
+
     </style>
 </head>
 <body>
@@ -334,8 +370,12 @@
             <label for="story-description">Description:</label>
             <textarea id="story-description" name="story_description"></textarea>
 
-            <label for="acceptance-criteria">Acceptance Criteria:</label>
-            <textarea id="acceptance-criteria" name="acceptance_criteria"></textarea>
+            <label for="acceptance-criteria">Acceptance Criteria (you can paste images here):</label>
+            <div id="acceptance-criteria" 
+                 contenteditable="true" 
+                 class="rich-text-editor"
+                 style="min-height: 120px; padding: 8px; border: 1px solid var(--border-color); border-radius: var(--border-radius); background-color: #ffffff; outline: none; white-space: pre-wrap; word-wrap: break-word; overflow-y: auto;"
+                 data-placeholder="Paste acceptance criteria here. You can paste images (screenshots) directly..."></div>
 
             <div id="related-stories-section" class="hidden">
                 <h3>Related User Stories</h3>
@@ -418,6 +458,198 @@
         copyAnalysisBtn.addEventListener('click', copyAnalysisToClipboard);
         testCasesContainer.addEventListener('click', handleCardClick);
         testCasesContainer.addEventListener('input', updateTestCaseData);
+        
+        // Initialize rich text editor on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeRichTextEditor();
+        });
+
+        // Initialize Rich Text Editor for Acceptance Criteria
+        function initializeRichTextEditor() {
+            const editor = document.getElementById('acceptance-criteria');
+            if (!editor) return;
+
+            // Handle paste events
+            editor.addEventListener('paste', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                const clipboardData = e.clipboardData;
+
+                if (!clipboardData || !clipboardData.items) {
+                    // Fallback to default paste
+                    const text = clipboardData.getData('text/plain');
+                    document.execCommand('insertText', false, text);
+                    return;
+                }
+
+                // Check for images
+                let imageFound = false;
+                for (let i = 0; i < clipboardData.items.length; i++) {
+                    const item = clipboardData.items[i];
+                    
+                    if (item.type.indexOf('image') !== -1 || item.kind === 'file') {
+                        const blob = item.getAsFile();
+                        if (blob && blob.type.startsWith('image/')) {
+                            imageFound = true;
+                            const reader = new FileReader();
+                            reader.onload = function(event) {
+                                const imageDataUrl = event.target.result;
+                                
+                                // Insert image
+                                const img = document.createElement('img');
+                                img.src = imageDataUrl;
+                                img.style.maxWidth = '100%';
+                                img.style.height = 'auto';
+                                img.style.display = 'block';
+                                img.style.margin = '10px 0';
+                                img.alt = 'Pasted image';
+                                
+                                // Get selection or create range at end
+                                const selection = window.getSelection();
+                                let range = null;
+                                
+                                if (selection && selection.rangeCount > 0) {
+                                    range = selection.getRangeAt(0);
+                                    if (!editor.contains(range.commonAncestorContainer)) {
+                                        range = null;
+                                    }
+                                }
+                                
+                                if (!range) {
+                                    range = document.createRange();
+                                    if (editor.childNodes.length > 0) {
+                                        range.selectNodeContents(editor);
+                                        range.collapse(false);
+                                    } else {
+                                        range.setStart(editor, 0);
+                                        range.setEnd(editor, 0);
+                                    }
+                                }
+                                
+                                range.deleteContents();
+                                range.insertNode(img);
+                                
+                                // Add line break after image
+                                const br = document.createElement('br');
+                                range.setStartAfter(img);
+                                range.insertNode(br);
+                                range.setStartAfter(br);
+                                range.collapse(true);
+                                
+                                if (selection) {
+                                    selection.removeAllRanges();
+                                    selection.addRange(range);
+                                }
+                                
+                                // Trigger input event for any listeners
+                                editor.dispatchEvent(new Event('input', { bubbles: true }));
+                            };
+                            reader.readAsDataURL(blob);
+                            break;
+                        }
+                    }
+                }
+
+                // If no image, paste as text/HTML
+                if (!imageFound) {
+                    const htmlData = clipboardData.getData('text/html');
+                    const textData = clipboardData.getData('text/plain');
+                    
+                    if (htmlData) {
+                        const tempDiv = document.createElement('div');
+                        tempDiv.innerHTML = htmlData;
+                        // Remove images from HTML paste (we handle them separately)
+                        tempDiv.querySelectorAll('img').forEach(img => img.remove());
+                        
+                        const selection = window.getSelection();
+                        let range = null;
+                        
+                        if (selection && selection.rangeCount > 0) {
+                            range = selection.getRangeAt(0);
+                            if (!editor.contains(range.commonAncestorContainer)) {
+                                range = null;
+                            }
+                        }
+                        
+                        if (!range) {
+                            range = document.createRange();
+                            if (editor.childNodes.length > 0) {
+                                range.selectNodeContents(editor);
+                                range.collapse(false);
+                            } else {
+                                range.setStart(editor, 0);
+                                range.setEnd(editor, 0);
+                            }
+                        }
+                        
+                        range.deleteContents();
+                        while (tempDiv.firstChild) {
+                            range.insertNode(tempDiv.firstChild);
+                            range.setStartAfter(range.endContainer.lastChild || range.endContainer);
+                        }
+                        range.collapse(false);
+                        
+                        if (selection) {
+                            selection.removeAllRanges();
+                            selection.addRange(range);
+                        }
+                    } else if (textData) {
+                        const selection = window.getSelection();
+                        let range = null;
+                        
+                        if (selection && selection.rangeCount > 0) {
+                            range = selection.getRangeAt(0);
+                            if (!editor.contains(range.commonAncestorContainer)) {
+                                range = null;
+                            }
+                        }
+                        
+                        if (!range) {
+                            range = document.createRange();
+                            if (editor.childNodes.length > 0) {
+                                range.selectNodeContents(editor);
+                                range.collapse(false);
+                            } else {
+                                range.setStart(editor, 0);
+                                range.setEnd(editor, 0);
+                            }
+                        }
+                        
+                        range.deleteContents();
+                        const textNode = document.createTextNode(textData);
+                        range.insertNode(textNode);
+                        range.setStartAfter(textNode);
+                        range.collapse(true);
+                        
+                        if (selection) {
+                            selection.removeAllRanges();
+                            selection.addRange(range);
+                        }
+                    }
+                    
+                    editor.dispatchEvent(new Event('input', { bubbles: true }));
+                }
+            });
+        }
+
+        // Helper function to get HTML content from rich text editor
+        function getAcceptanceCriteria() {
+            const editor = document.getElementById('acceptance-criteria');
+            if (editor && editor.contentEditable === 'true') {
+                return editor.innerHTML;
+            }
+            return editor ? editor.value : '';
+        }
+
+        // Helper function to set HTML content in rich text editor
+        function setAcceptanceCriteria(html) {
+            const editor = document.getElementById('acceptance-criteria');
+            if (editor && editor.contentEditable === 'true') {
+                editor.innerHTML = html || '';
+            } else if (editor) {
+                editor.value = html || '';
+            }
+        }
 
         async function fetchStory() {
             const storyId = document.getElementById('user-story-id').value;
@@ -451,7 +683,7 @@
                 const data = await response.json();
                 document.getElementById('story-title').value = data.title;
                 document.getElementById('story-description').value = data.description;
-                document.getElementById('acceptance-criteria').value = data.acceptance_criteria;
+                setAcceptanceCriteria(data.acceptance_criteria || '');
                 storyDetails.classList.remove('hidden');
                 storyAnalysisSection.classList.add('hidden');
                 testCasesSection.classList.add('hidden');
@@ -603,10 +835,24 @@
                 }
             });
 
+            // Extract text from HTML for acceptance criteria before sending to API
+            function extractTextFromHtml(html) {
+                if (!html) return '';
+                const div = document.createElement('div');
+                div.innerHTML = html;
+                const images = div.querySelectorAll('img');
+                images.forEach(img => {
+                    const alt = img.getAttribute('alt') || 'image';
+                    const textNode = document.createTextNode(`[Image: ${alt}]`);
+                    img.parentNode.replaceChild(textNode, img);
+                });
+                return div.textContent || div.innerText || '';
+            }
+
             const payload = {
                 story_title: document.getElementById('story-title').value,
                 story_description: document.getElementById('story-description').value,
-                acceptance_criteria: document.getElementById('acceptance-criteria').value,
+                acceptance_criteria: extractTextFromHtml(getAcceptanceCriteria()),
                 data_dictionary: document.getElementById('data-dictionary').value,
                 related_stories: selectedRelated
             };
@@ -643,7 +889,20 @@
         async function analyzeStory() {
             const storyTitle = document.getElementById('story-title').value;
             const storyDescription = document.getElementById('story-description').value;
-            const acceptanceCriteria = document.getElementById('acceptance-criteria').value;
+            // Extract text from HTML for acceptance criteria
+            function extractTextFromHtml(html) {
+                if (!html) return '';
+                const div = document.createElement('div');
+                div.innerHTML = html;
+                const images = div.querySelectorAll('img');
+                images.forEach(img => {
+                    const alt = img.getAttribute('alt') || 'image';
+                    const textNode = document.createTextNode(`[Image: ${alt}]`);
+                    img.parentNode.replaceChild(textNode, img);
+                });
+                return div.textContent || div.innerText || '';
+            }
+            const acceptanceCriteria = extractTextFromHtml(getAcceptanceCriteria());
             
             if (!storyTitle) {
                 alert('Please fetch a user story or enter a story title first.');
