@@ -4,4 +4,5 @@ python-dotenv
 google-generativeai
 azure-devops
 msrest
-beautifulsoup4 
+beautifulsoup4
+Pillow 

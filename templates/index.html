@@ -852,26 +852,13 @@
                     });
                 }
             });
-
-            // Extract text from HTML for acceptance criteria before sending to API
-            function extractTextFromHtml(html) {
-                if (!html) return '';
-                const div = document.createElement('div');
-                div.innerHTML = html;
-                const images = div.querySelectorAll('img');
-                images.forEach(img => {
-                    const alt = img.getAttribute('alt') || 'image';
-                    const textNode = document.createTextNode(`[Image: ${alt}]`);
-                    img.parentNode.replaceChild(textNode, img);
-                });
-                return div.textContent || div.innerText || '';
-            }
-
+            // Send HTML content directly so backend can extract images
+            // Backend will handle image extraction and processing
             const payload = {
                 story_title: document.getElementById('story-title').value,
-                story_description: extractTextFromHtml(getDescription()),
-                acceptance_criteria: extractTextFromHtml(getAcceptanceCriteria()),
-                data_dictionary: extractTextFromHtml(getDataDictionary()),
+                story_description: getDescription(), // Send HTML directly
+                acceptance_criteria: getAcceptanceCriteria(), // Send HTML directly
+                data_dictionary: getDataDictionary(), // Send HTML directly
                 related_stories: selectedRelated
             };
 
@@ -906,21 +893,10 @@
 
         async function analyzeStory() {
             const storyTitle = document.getElementById('story-title').value;
-            // Extract text from HTML for all rich text fields
-            function extractTextFromHtml(html) {
-                if (!html) return '';
-                const div = document.createElement('div');
-                div.innerHTML = html;
-                const images = div.querySelectorAll('img');
-                images.forEach(img => {
-                    const alt = img.getAttribute('alt') || 'image';
-                    const textNode = document.createTextNode(`[Image: ${alt}]`);
-                    img.parentNode.replaceChild(textNode, img);
-                });
-                return div.textContent || div.innerText || '';
-            }
-            const storyDescription = extractTextFromHtml(getDescription());
-            const acceptanceCriteria = extractTextFromHtml(getAcceptanceCriteria());
+            // Send HTML content directly so backend can extract images
+            // Backend will handle image extraction and processing
+            const storyDescription = getDescription(); // Send HTML directly
+            const acceptanceCriteria = getAcceptanceCriteria(); // Send HTML directly
             
             if (!storyTitle) {
                 alert('Please fetch a user story or enter a story title first.');

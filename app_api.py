@@ -17,6 +17,9 @@ import ast
 import html
 import unicodedata
 import string
+import base64
+from io import BytesIO
+from PIL import Image
 
 # Load environment variables
 load_dotenv()
@@ -45,6 +48,73 @@ def handle_preflight():
         response.headers.add("Access-Control-Allow-Headers", "Content-Type, Authorization")
         response.headers.add("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         return response
+
+def extract_images_from_html(html_content):
+    """Extract images from HTML content and return list of PIL Image objects and text with placeholders"""
+    if not html_content:
+        return [], ""
+    
+    soup = BeautifulSoup(html_content, 'html.parser')
+    images = soup.find_all('img')
+    
+    image_objects = []
+    
+    # Process images and replace with placeholders
+    for img in images:
+        src = img.get('src', '')
+        if src.startswith('data:image'):
+            try:
+                # Parse data URL: data:image/png;base64,<data>
+                header, data = src.split(',', 1)
+                
+                # Decode base64
+                image_bytes = base64.b64decode(data)
+                image = Image.open(BytesIO(image_bytes))
+                
+                # Convert to RGB if necessary (Gemini requires RGB format)
+                if image.mode in ('RGBA', 'LA'):
+                    rgb_image = Image.new('RGB', image.size, (255, 255, 255))
+                    rgb_image.paste(image, mask=image.split()[-1] if image.mode == 'RGBA' else None)
+                    image = rgb_image
+                elif image.mode == 'P':
+                    image = image.convert('RGB')
+                elif image.mode != 'RGB':
+                    image = image.convert('RGB')
+                
+                image_objects.append(image)
+                
+                # Replace img tag with placeholder text
+                alt_text = img.get('alt', 'image')
+                img.replace_with(f"[Image {len(image_objects)}: {alt_text}]")
+            except Exception as e:
+                print(f"WARNING: Failed to process image: {e}")
+                import traceback
+                traceback.print_exc()
+                alt_text = img.get('alt', 'image')
+                img.replace_with(f"[Image: {alt_text} - failed to load]")
+        else:
+            # External image URL - keep as placeholder
+            alt_text = img.get('alt', 'image')
+            img.replace_with(f"[Image: {alt_text} - external URL]")
+    
+    # Get text content with placeholders
+    text_content = soup.get_text(separator=' ', strip=True)
+    
+    return image_objects, text_content
+
+def extract_text_only_from_html(html_content):
+    """Extract only text from HTML, replacing images with placeholders"""
+    if not html_content:
+        return ""
+    
+    soup = BeautifulSoup(html_content, 'html.parser')
+    
+    # Replace img tags with text placeholders
+    for img in soup.find_all('img'):
+        alt_text = img.get('alt', 'image')
+        img.replace_with(f"[Image: {alt_text}]")
+    
+    return soup.get_text(separator='\n', strip=True)
 
 def get_azure_devops_connection(auth_token: str, org_url: str):
     """Create Azure DevOps connection using OAuth token"""
@@ -99,7 +169,15 @@ def analyze_story():
             print("ERROR: Story title is missing")
             return jsonify({'error': 'Story Title is required.'}), 400
         
-        model = genai.GenerativeModel('gemini-flash-latest')
+        model = genai.GenerativeModel('gemini-1.5-flash')  # Use model that supports images
+        
+        # Extract images and text from HTML fields
+        desc_images, desc_text = extract_images_from_html(story_description)
+        ac_images, ac_text = extract_images_from_html(acceptance_criteria)
+        
+        # Collect all images
+        all_images = desc_images + ac_images
+        print(f"DEBUG: Found {len(all_images)} images to send to Gemini")
         
         # Build the prompt for analysis
         test_cases_section = ""
@@ -112,8 +190,8 @@ Your task is to review the following user story (and related test cases if avail
 
 **USER STORY:**
 **Title:** {story_title}
-**Description:** {story_description}
-**Acceptance Criteria:** {acceptance_criteria}
+**Description:** {desc_text}
+**Acceptance Criteria:** {ac_text}
 {test_cases_section}
 
 Please analyze and respond using the structure below.
@@ -202,12 +280,27 @@ Here is the preferred HTML structure template (use this for formatting your resp
 - Return ONLY the HTML code, starting with `<div class="review-container">` and ending with `</div>`.
 - Do NOT include markdown formatting, code blocks with triple backticks, or any text outside the HTML structure.
 - Make sure all HTML is properly formatted and ready to be inserted directly into a webpage.
+
+**IMAGES PROVIDED:**
+If images are included with the user story, please analyze them and reference their content in your analysis. Describe what you see in the images and how they relate to the user story requirements.
 """
         
         print(f"DEBUG: Calling Gemini API for analysis...")
         print(f"DEBUG: Prompt length: {len(prompt)}")
+        print(f"DEBUG: Number of images: {len(all_images)}")
         
-        response = model.generate_content(prompt)
+        # Build content array with text and images
+        content_parts = [prompt]
+        for image in all_images:
+            content_parts.append(image)
+        
+        # Send to Gemini with multimodal content
+        if len(all_images) > 0:
+            response = model.generate_content(content_parts)
+            print(f"DEBUG: Sent {len(all_images)} images to Gemini")
+        else:
+            response = model.generate_content(prompt)
+        
         print(f"DEBUG: Gemini response type: {type(response)}")
         
         # Extract text from response
@@ -258,9 +351,11 @@ Here is the preferred HTML structure template (use this for formatting your resp
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
-def _generate_cases_for_type(model, story_title, story_description, acceptance_criteria, data_dictionary, case_type, related_stories=None):
-    """Generate test cases for a specific type"""
+def _generate_cases_for_type(model, story_title, story_description, acceptance_criteria, data_dictionary, case_type, related_stories=None, images=None):
+    """Generate test cases for a specific type, optionally including images"""
     print(f"DEBUG: _generate_cases_for_type called for {case_type}. related_stories:", related_stories)
+    if images:
+        print(f"DEBUG: Including {len(images)} images in test case generation")
     guideline_map = {
         "Positive": """
 **Positive Test Case Guidelines:**
@@ -305,6 +400,9 @@ You are an expert test case generator for Azure DevOps with a focus on comprehen
 - **Data Dictionary:** {data_dictionary}
 {related_block}
 
+**IMAGES PROVIDED:**
+If images are included with the user story, please analyze them carefully and reference their content when generating test cases. The images may show UI mockups, workflows, or visual requirements that should be covered in the test cases.
+
 **Universal Guidelines:**
 1. **Descriptive Titles:** Create specific, action-oriented titles that clearly describe what functionality is being tested. Avoid generic titles like "Test login" - instead use "User can successfully login with valid email and password".
 2. **Consistency First:** For any '{case_type}' test, the `title`, `description`, and `expectedResult` must all be consistent with that scenario. For example, a 'Negative' test's title must describe a failure condition, and its expected result must describe the correct error handling.
@@ -343,7 +441,15 @@ Now, generate ONLY the `{case_type}` test cases based on all these instructions.
 - Do not generate duplicate test cases. Each test case must be unique in its condition, steps, and expected result.
 """
     try:
-        response = model.generate_content(prompt)
+        # Build content array with text and images
+        if images and len(images) > 0:
+            content_parts = [prompt]
+            content_parts.extend(images)
+            response = model.generate_content(content_parts)
+            print(f"DEBUG: Sent {len(images)} images to Gemini for {case_type} test cases")
+        else:
+            response = model.generate_content(prompt)
+        
         print(f"Raw Gemini response for {case_type}:\n{response.text}\n--- End Response ---\n")
         # Clean the response to get a clean JSON array string
         clean_json_text = response.text.strip().replace('```json', '').replace('```', '').strip()
@@ -381,7 +487,16 @@ def generate_test_cases_stream():
         if not all([story_title, acceptance_criteria]):
             return Response("Story Title and Acceptance Criteria are required.", status=400)
         
-        model = genai.GenerativeModel('gemini-flash-latest')
+        model = genai.GenerativeModel('gemini-1.5-flash')  # Use model that supports images
+        
+        # Extract images and text from HTML fields
+        desc_images, desc_text = extract_images_from_html(story_description)
+        ac_images, ac_text = extract_images_from_html(acceptance_criteria)
+        dict_images, dict_text = extract_images_from_html(data_dictionary)
+        
+        # Collect all images
+        all_images = desc_images + ac_images + dict_images
+        print(f"DEBUG: Found {len(all_images)} images for test case generation")
         
         def generate():
             case_types = ["Positive", "Negative", "Edge Case", "Data Flow"]
@@ -389,8 +504,8 @@ def generate_test_cases_stream():
 
             for case_type in case_types:
                 print(f"DEBUG: Calling _generate_cases_for_type for {case_type} with related_stories:", related_stories)
-                # Generate cases for the current type
-                json_text_chunk = _generate_cases_for_type(model, story_title, story_description, acceptance_criteria, data_dictionary, case_type, related_stories)
+                # Generate cases for the current type, including images
+                json_text_chunk = _generate_cases_for_type(model, story_title, desc_text, ac_text, dict_text, case_type, related_stories, all_images)
                 
                 # The API might return an empty or invalid string, so we validate it
                 try:

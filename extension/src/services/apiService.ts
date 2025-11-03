@@ -61,17 +61,15 @@ class ApiService {
   ): Promise<AnalysisResponse> {
     const headers = await this.getHeaders();
 
-    // Extract text from HTML to avoid sending large base64 image data
-    const storyDescriptionText = this.extractTextFromHtml(storyDescription);
-    const acceptanceCriteriaText = this.extractTextFromHtml(acceptanceCriteria);
-
+    // Send HTML content directly so backend can extract images
+    // Backend will handle image extraction and processing
     const response = await fetch(`${API_BASE_URL}/analyze_story`, {
       method: "POST",
       headers,
       body: JSON.stringify({
         story_title: storyTitle,
-        story_description: storyDescriptionText,
-        acceptance_criteria: acceptanceCriteriaText,
+        story_description: storyDescription, // Send HTML directly
+        acceptance_criteria: acceptanceCriteria, // Send HTML directly
         related_test_cases: relatedTestCases,
       }),
     });
@@ -94,16 +92,13 @@ class ApiService {
   ): Promise<any[]> {
     const headers = await this.getHeaders();
 
-    // Extract text from HTML to avoid sending large base64 image data
-    const storyDescriptionText = this.extractTextFromHtml(storyDescription);
-    const acceptanceCriteriaText = this.extractTextFromHtml(acceptanceCriteria);
-    const dataDictionaryText = this.extractTextFromHtml(dataDictionary);
-
+    // Send HTML content directly so backend can extract images
+    // Backend will handle image extraction and processing
     const payload = {
       story_title: storyTitle,
-      story_description: storyDescriptionText,
-      acceptance_criteria: acceptanceCriteriaText,
-      data_dictionary: dataDictionaryText,
+      story_description: storyDescription, // Send HTML directly
+      acceptance_criteria: acceptanceCriteria, // Send HTML directly
+      data_dictionary: dataDictionary, // Send HTML directly
       related_stories: relatedStories,
     };
 
