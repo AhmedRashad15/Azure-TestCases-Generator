@@ -37,6 +37,7 @@ def index():
 
 @app.route('/fetch_story', methods=['POST'])
 def fetch_story():
+    print("fetch_story called")
     data = request.json or {}
     story_id = data.get('story_id')
     azure_devops_org_url = data.get('azure_devops_org_url')
@@ -47,6 +48,7 @@ def fetch_story():
         return jsonify({'error': 'Azure DevOps details and User Story ID are required.'}), 400
 
     try:
+        print("About to fetch work item")
         credentials = BasicAuthentication('', azure_devops_pat or '')
         connection = Connection(base_url=azure_devops_org_url, creds=credentials)
         work_item_tracking_client = connection.get_client('azure.devops.v7_1.work_item_tracking.work_item_tracking_client.WorkItemTrackingClient')
@@ -96,6 +98,11 @@ def fetch_story():
         }
         return jsonify(story_details)
     except Exception as e:
+        print("Exception occurred in fetch_story:", e)
+        if hasattr(e, 'response') and hasattr(e.response, 'text'):
+            print("Azure DevOps response body:", e.response.text)
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 def _generate_cases_for_type(model, story_title, story_description, acceptance_criteria, data_dictionary, case_type, related_stories=None):
@@ -214,7 +221,7 @@ def generate_test_cases_stream():
     if not all([story_title, acceptance_criteria]):
         return Response("Story Title and Acceptance Criteria are required.", status=400)
 
-    model = genai.GenerativeModel('gemini-1.5-flash-latest')
+    model = genai.GenerativeModel('gemini-flash-latest')
     
     def generate():
         case_types = ["Positive", "Negative", "Edge Case", "Data Flow"]
@@ -400,6 +407,195 @@ def normalize_title(title):
     title = unicodedata.normalize('NFKD', title)
     title = ''.join(ch for ch in title if not unicodedata.category(ch).startswith('C'))  # Remove control chars
     return title
+
+@app.route('/analyze_story', methods=['POST'])
+def analyze_story():
+    """Analyze a user story and provide structured review"""
+    print("DEBUG: /analyze_story endpoint called")
+    try:
+        data = request.json or {}
+        print(f"DEBUG: Request data keys: {data.keys() if data else 'None'}")
+        
+        story_title = data.get('story_title')
+        story_description = data.get('story_description', '')
+        acceptance_criteria = data.get('acceptance_criteria', '')
+        related_test_cases = data.get('related_test_cases', '')
+        
+        print(f"DEBUG: Story title: {story_title}")
+        print(f"DEBUG: Story description length: {len(story_description)}")
+        print(f"DEBUG: Acceptance criteria length: {len(acceptance_criteria)}")
+        
+        if not story_title:
+            print("ERROR: Story title is missing")
+            return jsonify({'error': 'Story Title is required.'}), 400
+        
+        model = genai.GenerativeModel('gemini-flash-latest')
+        
+        # Build the prompt for analysis
+        test_cases_section = ""
+        if related_test_cases:
+            test_cases_section = f"\n\n**RELATED TEST CASES (if available):**\n{related_test_cases}"
+        
+        prompt = f"""You are an experienced software analyst and product owner assistant.
+
+Your task is to review the following user story (and related test cases if available) and produce a simple, actionable, and UI-ready output for the development team.
+
+**USER STORY:**
+**Title:** {story_title}
+**Description:** {story_description}
+**Acceptance Criteria:** {acceptance_criteria}
+{test_cases_section}
+
+Please analyze and respond using the structure below.
+
+---
+
+### 🟦 1. User Story Summary
+Provide a short, simple summary (2–3 sentences) describing the purpose of the user story.  
+If related stories exist, mention their connection briefly.
+
+---
+
+### 🟩 2. Key Functional Points
+List the main actions, goals, or behaviors that this user story describes.  
+Keep these as **short, clear bullet points**.
+
+---
+
+### 🟨 3. Ambiguities & Clarification Questions
+Identify any unclear, missing, or ambiguous parts of the user story.  
+For each one, provide:
+- **Ambiguity:** short description of what's unclear  
+- **Question:** the specific question that should be asked to the Product Owner to clarify this
+
+Keep this section clear and easy to read — one ambiguity and one question per bullet point.
+
+---
+
+### 🟧 4. Recommendations
+Provide 2–4 short, actionable suggestions to make the story clearer, more complete, or easier to test.
+
+---
+
+### 🎨 UI Rendering Guidelines
+Return your final output formatted as **HTML** (not markdown), following these visual and structural rules:
+
+- Each section should be wrapped in a `<div>` with a unique color-coded header:
+  - **1. Summary:** Blue header (`#0078D7`)
+  - **2. Key Functional Points:** Green header (`#28a745`)
+  - **3. Ambiguities & Questions:** Yellow header (`#ffc107`)
+  - **4. Recommendations:** Orange header (`#fd7e14`)
+- Headers must have **bold white text**, padding (8px), and rounded corners.
+- Each bullet point should use:
+  - **Bold labels** (like "Ambiguity:" / "Question:")
+  - Alternating font colors for readability:
+    - Header text: white
+    - Content text: dark gray (`#333`)
+    - Key terms/questions: navy blue (`#004080`)
+- Wrap all sections inside a main `<div class="review-container">` with:
+  - Light background (`#f9f9f9`)
+  - Padding: 15px
+  - Border-radius: 8px
+  - Small shadow for readability
+- Use semantic HTML: `<h2>` for headers, `<ul>` and `<li>` for lists, `<b>` for key labels.
+- Keep the text short and easy to scan — avoid long paragraphs.
+
+Here is the preferred HTML structure template (use this for formatting your response):
+
+```html
+<div class="review-container">
+  <h2 class="header blue">1. User Story Summary</h2>
+  <p>This story allows users to reset their password using an email link...</p>
+
+  <h2 class="header green">2. Key Functional Points</h2>
+  <ul>
+    <li><b>Reset Password:</b> User can trigger password reset via email.</li>
+    <li><b>Validation:</b> Check if the email exists before sending reset link.</li>
+  </ul>
+
+  <h2 class="header yellow">3. Ambiguities & Clarification Questions</h2>
+  <ul>
+    <li><b>Ambiguity:</b> No email content defined.<br>
+        <b>Question:</b> What should the reset email include?</li>
+    <li><b>Ambiguity:</b> No mention of link expiration.<br>
+        <b>Question:</b> How long should the reset link remain valid?</li>
+  </ul>
+
+  <h2 class="header orange">4. Recommendations</h2>
+  <ul>
+    <li>Add acceptance criteria for email content and expiration time.</li>
+  </ul>
+</div>
+```
+
+**IMPORTANT:** 
+- Return ONLY the HTML code, starting with `<div class="review-container">` and ending with `</div>`.
+- Do NOT include markdown formatting, code blocks with triple backticks, or any text outside the HTML structure.
+- Make sure all HTML is properly formatted and ready to be inserted directly into a webpage.
+"""
+        
+        print(f"DEBUG: Calling Gemini API for analysis...")
+        print(f"DEBUG: Prompt length: {len(prompt)}")
+        
+        response = model.generate_content(prompt)
+        print(f"DEBUG: Gemini response type: {type(response)}")
+        
+        # Extract text from response - use the same pattern as test case generation
+        try:
+            if hasattr(response, 'text'):
+                analysis_text = response.text.strip()
+            else:
+                # Try to get text from candidates (backup method)
+                print(f"DEBUG: Response doesn't have 'text' attribute, trying candidates...")
+                print(f"DEBUG: Response attributes: {dir(response)}")
+                if hasattr(response, 'candidates') and response.candidates:
+                    if hasattr(response.candidates[0], 'content'):
+                        if hasattr(response.candidates[0].content, 'parts'):
+                            parts = response.candidates[0].content.parts
+                            analysis_text = ''.join([part.text for part in parts if hasattr(part, 'text')]).strip()
+                        else:
+                            analysis_text = str(response.candidates[0].content).strip()
+                    else:
+                        analysis_text = str(response.candidates[0]).strip()
+                else:
+                    # Last resort: convert entire response to string
+                    analysis_text = str(response).strip()
+                    print(f"WARNING: Using fallback string conversion")
+            
+            if not analysis_text:
+                raise ValueError("Empty analysis response from Gemini API")
+            
+            # Clean up the response - remove markdown code blocks if present
+            analysis_text = analysis_text.strip()
+            # Remove ```html or ``` markers
+            if analysis_text.startswith('```'):
+                # Remove opening code block
+                lines = analysis_text.split('\n')
+                if lines[0].startswith('```'):
+                    lines = lines[1:]
+                if lines and lines[-1].strip() == '```':
+                    lines = lines[:-1]
+                analysis_text = '\n'.join(lines).strip()
+            
+            print(f"DEBUG: Successfully extracted analysis text, length: {len(analysis_text)}")
+            print(f"DEBUG: First 200 chars: {analysis_text[:200]}")
+            
+        except Exception as extract_error:
+            print(f"ERROR extracting text from response: {extract_error}")
+            import traceback
+            traceback.print_exc()
+            raise ValueError(f"Failed to extract text from Gemini response: {str(extract_error)}")
+        
+        return jsonify({'analysis': analysis_text})
+    except Exception as e:
+        import traceback
+        print(f"Error generating analysis: {e}")
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/test_error')
+def test_error():
+    raise Exception("This is a test error!")
 
 if __name__ == '__main__':
     app.run(debug=True) 

@@ -1,0 +1,64 @@
+{
+  "manifestVersion": 1,
+  "id": "test-genius",
+  "version": "1.0.0",
+  "name": "Test Genius - AI Test Case Generator",
+  "publisher": "your-publisher-id",
+  "description": "Generate comprehensive test cases from user stories using Google Gemini AI. Includes story analysis, test case generation, and direct upload to Azure Test Plans.",
+  "categories": [
+    "Azure Boards",
+    "Azure Test Plans",
+    "Testing"
+  ],
+  "targets": [
+    {
+      "id": "Microsoft.VisualStudio.Services"
+    }
+  ],
+  "scopes": [
+    "vso.work",
+    "vso.work_write",
+    "vso.test_write",
+    "vso.test_manage"
+  ],
+  "icons": {
+    "default": "images/icon.png"
+  },
+  "content": {
+    "details": {
+      "path": "README.md"
+    },
+    "license": {
+      "path": "LICENSE"
+    }
+  },
+  "contributions": [
+    {
+      "id": "test-genius-hub",
+      "type": "ms.vss-web.hub",
+      "targets": [
+        "ms.vss-work-web.work-items-hub-group"
+      ],
+      "properties": {
+        "name": "Test Genius",
+        "uri": "dist/index.html",
+        "icon": "images/icon.png"
+      }
+    }
+  ],
+  "files": [
+    {
+      "path": "dist",
+      "addressable": true
+    },
+    {
+      "path": "images",
+      "addressable": true
+    }
+  ],
+  "repository": {
+    "type": "git",
+    "uri": "https://github.com/yourusername/test-genius"
+  }
+}
+

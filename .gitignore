@@ -8,4 +8,35 @@ __pycache__/
 *.pyd
 .Python
 env/
-venv/ 
+venv/
+
+# Exclude all markdown documentation files
+*.md
+!README.md
+
+# Node modules
+node_modules/
+
+# Build outputs
+dist/
+*.map
+*.LICENSE.txt
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+gitlog.txt
+hosts_entry.txt
+
+# Test files
+test_gemini.py 

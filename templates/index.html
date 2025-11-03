@@ -240,6 +240,67 @@
             margin: 0;
         }
 
+        /* User Story Analysis Styles */
+        .review-container {
+            background: #f9f9f9;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin: 1em 0;
+        }
+
+        .review-container h2.header {
+            color: white;
+            font-weight: bold;
+            padding: 8px 12px;
+            border-radius: 6px;
+            margin: 1em 0 0.5em 0;
+            font-size: 1.1em;
+        }
+
+        .review-container h2.header.blue {
+            background-color: #0078D7;
+        }
+
+        .review-container h2.header.green {
+            background-color: #28a745;
+        }
+
+        .review-container h2.header.yellow {
+            background-color: #ffc107;
+            color: #333; /* Dark text for yellow background */
+        }
+
+        .review-container h2.header.orange {
+            background-color: #fd7e14;
+        }
+
+        .review-container h2.header.purple {
+            background-color: #6f42c1;
+        }
+
+        .review-container p {
+            color: #333;
+            margin: 0.5em 0 1em 0;
+            line-height: 1.6;
+        }
+
+        .review-container ul {
+            margin: 0.5em 0 1em 1.5em;
+            padding-left: 1em;
+        }
+
+        .review-container li {
+            color: #333;
+            margin: 0.5em 0;
+            line-height: 1.6;
+        }
+
+        .review-container b {
+            color: #004080;
+            font-weight: 600;
+        }
+
     </style>
 </head>
 <body>
@@ -283,6 +344,12 @@
             <label for="data-dictionary">Data Dictionary (Optional):</label>
             <textarea id="data-dictionary" name="data_dictionary"></textarea>
 
+            <button id="analyze-story-btn">Analyze User Story</button>
+            <div id="loading-analysis" class="hidden">
+                <div class="spinner"></div>
+                <span id="analysis-status">Analyzing...</span>
+            </div>
+
             <button id="generate-cases-btn">Generate Test Cases</button>
             <div id="loading-generator" class="hidden">
                 <div class="spinner"></div>
@@ -302,6 +369,13 @@
             </div>
         </div>
 
+        <div id="story-analysis-section" class="hidden card">
+            <h2>2a. User Story Analysis</h2>
+            <div id="story-analysis-content" style="max-height: 600px; overflow-y: auto;"></div>
+            <button id="copy-analysis-btn" style="margin-top: 1em;">Copy Analysis to Clipboard</button>
+            <div id="copy-status" style="margin-top: 0.5em; color: var(--success-color); display: none;">Copied to clipboard!</div>
+        </div>
+
         <div id="test-cases-section" class="hidden card">
             <h2>3. Generated Test Cases <span id="test-case-count"></span></h2>
             <div id="test-cases-container"></div>
@@ -315,24 +389,33 @@
     <script>
         // DOM Elements
         const fetchStoryBtn = document.getElementById('fetch-story-btn');
+        const analyzeStoryBtn = document.getElementById('analyze-story-btn');
         const generateCasesBtn = document.getElementById('generate-cases-btn');
         const uploadCasesBtn = document.getElementById('upload-cases-btn');
+        const copyAnalysisBtn = document.getElementById('copy-analysis-btn');
         
         const storyDetails = document.getElementById('story-details');
+        const storyAnalysisSection = document.getElementById('story-analysis-section');
         const testCasesSection = document.getElementById('test-cases-section');
         const uploadSection = document.getElementById('upload-section');
         
         const loadingGenerator = document.getElementById('loading-generator');
+        const loadingAnalysis = document.getElementById('loading-analysis');
         const uploadStatus = document.getElementById('upload-status');
         const generationStatus = document.getElementById('generation-status');
+        const analysisStatus = document.getElementById('analysis-status');
+        const analysisContent = document.getElementById('story-analysis-content');
         const testCasesContainer = document.getElementById('test-cases-container');
+        const copyStatus = document.getElementById('copy-status');
 
         let allTestCases = [];
 
         // Event Listeners
         fetchStoryBtn.addEventListener('click', fetchStory);
+        analyzeStoryBtn.addEventListener('click', analyzeStory);
         generateCasesBtn.addEventListener('click', generateTestCases);
         uploadCasesBtn.addEventListener('click', uploadTestCases);
+        copyAnalysisBtn.addEventListener('click', copyAnalysisToClipboard);
         testCasesContainer.addEventListener('click', handleCardClick);
         testCasesContainer.addEventListener('input', updateTestCaseData);
 
@@ -370,6 +453,7 @@
                 document.getElementById('story-description').value = data.description;
                 document.getElementById('acceptance-criteria').value = data.acceptance_criteria;
                 storyDetails.classList.remove('hidden');
+                storyAnalysisSection.classList.add('hidden');
                 testCasesSection.classList.add('hidden');
                 document.getElementById('upload-section').classList.add('hidden');
                 allTestCases = [];
@@ -554,6 +638,127 @@
                 loadingGenerator.classList.add('hidden');
                 generateCasesBtn.disabled = false;
             };
+        }
+
+        async function analyzeStory() {
+            const storyTitle = document.getElementById('story-title').value;
+            const storyDescription = document.getElementById('story-description').value;
+            const acceptanceCriteria = document.getElementById('acceptance-criteria').value;
+            
+            if (!storyTitle) {
+                alert('Please fetch a user story or enter a story title first.');
+                return;
+            }
+
+            // Collect test cases if they exist
+            let relatedTestCases = '';
+            if (allTestCases.length > 0) {
+                relatedTestCases = JSON.stringify(allTestCases, null, 2);
+            }
+
+            loadingAnalysis.classList.remove('hidden');
+            analyzeStoryBtn.disabled = true;
+            analysisStatus.textContent = 'Analyzing user story...';
+            storyAnalysisSection.classList.add('hidden');
+
+            try {
+                const response = await fetch('/analyze_story', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        story_title: storyTitle,
+                        story_description: storyDescription,
+                        acceptance_criteria: acceptanceCriteria,
+                        related_test_cases: relatedTestCases
+                    })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('Analysis response:', data);
+                    if (data.analysis) {
+                        // Clean up the response - remove code blocks if present
+                        let htmlContent = data.analysis.trim();
+                        
+                        // Remove markdown code blocks if present
+                        htmlContent = htmlContent.replace(/```html\s*/g, '');
+                        htmlContent = htmlContent.replace(/```\s*/g, '');
+                        htmlContent = htmlContent.trim();
+                        
+                        // Extract HTML if wrapped in code blocks
+                        const htmlMatch = htmlContent.match(/<div class="review-container">[\s\S]*<\/div>/);
+                        if (htmlMatch) {
+                            htmlContent = htmlMatch[0];
+                        }
+                        
+                        // Render as HTML instead of plain text
+                        analysisContent.innerHTML = htmlContent;
+                        storyAnalysisSection.classList.remove('hidden');
+                        analysisStatus.textContent = 'Analysis complete!';
+                    } else {
+                        alert('Error: Analysis response is empty');
+                        analysisStatus.textContent = 'Analysis failed - empty response.';
+                    }
+                } else {
+                    let errorMsg = 'Unknown error';
+                    try {
+                        const error = await response.json();
+                        errorMsg = error.error || JSON.stringify(error);
+                    } catch (e) {
+                        errorMsg = `HTTP ${response.status}: ${response.statusText}`;
+                    }
+                    console.error('Analysis error:', errorMsg);
+                    alert('Error analyzing story: ' + errorMsg);
+                    analysisStatus.textContent = 'Analysis failed.';
+                }
+            } catch (error) {
+                console.error('Analysis exception:', error);
+                alert('Error: ' + error.message);
+                analysisStatus.textContent = 'Analysis failed: ' + error.message;
+            } finally {
+                setTimeout(() => {
+                    loadingAnalysis.classList.add('hidden');
+                    analyzeStoryBtn.disabled = false;
+                }, 500);
+            }
+        }
+
+        async function copyAnalysisToClipboard() {
+            // Get HTML content for copying
+            const analysisHtml = analysisContent.innerHTML;
+            // Also get plain text version
+            const analysisText = analysisContent.textContent || analysisContent.innerText;
+            try {
+                await navigator.clipboard.writeText(analysisText);
+                copyStatus.style.display = 'block';
+                copyStatus.style.color = 'var(--success-color)';
+                copyStatus.textContent = 'Copied to clipboard!';
+                setTimeout(() => {
+                    copyStatus.style.display = 'none';
+                }, 2000);
+            } catch (err) {
+                // Fallback for older browsers
+                const textArea = document.createElement('textarea');
+                textArea.value = analysisText;
+                textArea.style.position = 'fixed';
+                textArea.style.opacity = '0';
+                document.body.appendChild(textArea);
+                textArea.select();
+                try {
+                    document.execCommand('copy');
+                    copyStatus.style.display = 'block';
+                    copyStatus.style.color = 'var(--success-color)';
+                    copyStatus.textContent = 'Copied to clipboard!';
+                    setTimeout(() => {
+                        copyStatus.style.display = 'none';
+                    }, 2000);
+                } catch (e) {
+                    copyStatus.style.display = 'block';
+                    copyStatus.style.color = 'var(--error-color)';
+                    copyStatus.textContent = 'Failed to copy. Please select and copy manually.';
+                }
+                document.body.removeChild(textArea);
+            }
         }
 
         async function uploadTestCases() {

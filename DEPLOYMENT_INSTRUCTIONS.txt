@@ -1,0 +1,94 @@
+==========================================
+🚀 GITHUB DEPLOYMENT INSTRUCTIONS
+==========================================
+
+Repository: https://github.com/AhmedRashad15/Azure-TestCases-Generator
+
+✅ PREPARATION COMPLETE:
+- .gitignore updated to exclude .md files (except README.md)
+- Remote URL configured
+- Files ready for deployment
+
+==========================================
+OPTION 1: Quick Deploy (Automated Script)
+==========================================
+
+Run the PowerShell script:
+    .\deploy-to-github.ps1
+
+The script will:
+1. Check git status
+2. Add all files (excluding .md files via .gitignore)
+3. Prompt for commit message
+4. Commit changes
+5. Push to GitHub
+
+==========================================
+OPTION 2: Manual Deploy (Step by Step)
+==========================================
+
+1. Check what will be committed:
+   git status
+
+2. Add all files (gitignore will exclude .md files):
+   git add .
+
+3. Verify staged files:
+   git status
+
+4. Commit changes:
+   git commit -m "Deploy stable version - Test Genius Extension"
+
+5. Push to GitHub:
+   git push origin main
+
+==========================================
+FILES EXCLUDED FROM DEPLOYMENT:
+==========================================
+
+✅ All .md files (except README.md)
+✅ node_modules/
+✅ dist/ (build outputs)
+✅ .env (environment variables)
+✅ __pycache__/
+✅ *.log files
+✅ gitlog.txt, hosts_entry.txt
+✅ test_gemini.py
+
+==========================================
+FILES INCLUDED IN DEPLOYMENT:
+==========================================
+
+✅ README.md
+✅ app_api.py (Flask API)
+✅ app.py (original Flask app)
+✅ requirements.txt
+✅ extension/ (full extension source)
+✅ templates/ (HTML templates)
+✅ static/ (static files)
+✅ .gitignore
+✅ deploy-to-github.ps1
+
+==========================================
+VERIFY AFTER DEPLOYMENT:
+==========================================
+
+Visit: https://github.com/AhmedRashad15/Azure-TestCases-Generator
+
+Check that:
+- ✅ No .md files are visible (except README.md)
+- ✅ extension/ folder is present
+- ✅ app_api.py is present
+- ✅ All source code files are there
+
+==========================================
+NOTES:
+==========================================
+
+⚠️  Make sure .env file is NOT committed (already in .gitignore)
+⚠️  Make sure API keys are NOT in the code
+⚠️  The RichTextEditor feature is included but not yet applied
+⚠️  After deployment, you can apply the image paste feature
+
+==========================================
+
