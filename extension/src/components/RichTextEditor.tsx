@@ -30,9 +30,18 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
     if (readOnly) return;
 
     e.preventDefault();
+    e.stopPropagation();
     const clipboardData = e.clipboardData;
 
-    if (!editorRef.current) return;
+    if (!editorRef.current) {
+      console.error("RichTextEditor: editorRef.current is null");
+      return;
+    }
+
+    console.log("RichTextEditor: Paste event detected", {
+      items: clipboardData.items.length,
+      types: Array.from(clipboardData.types)
+    });
 
     // Ensure editor has focus
     editorRef.current.focus();
@@ -43,14 +52,29 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
         const item = clipboardData.items[i];
         
         // Check for image types
+        console.log("RichTextEditor: Checking item", { 
+          type: item.type, 
+          kind: item.kind 
+        });
+        
         if (item.type.indexOf("image") !== -1 || item.kind === "file") {
           const blob = item.getAsFile();
           if (blob && blob.type.startsWith("image/")) {
+            console.log("RichTextEditor: Image detected!", { 
+              blobType: blob.type, 
+              blobSize: blob.size 
+            });
+            
             const reader = new FileReader();
             reader.onload = (event) => {
               const imageDataUrl = event.target?.result as string;
               
-              if (!editorRef.current) return;
+              console.log("RichTextEditor: Image loaded, inserting...");
+              
+              if (!editorRef.current) {
+                console.error("RichTextEditor: editorRef.current is null in reader.onload");
+                return;
+              }
               
               // Create img element
               const img = document.createElement("img");

@@ -239,6 +239,17 @@ button:disabled {
   font-size: 14px;
   line-height: 1.5;
   color: var(--text-color);
+  /* Make it clearly not a textarea */
+  overflow-y: auto;
+  overflow-x: hidden;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  /* Visual indicator that it's editable */
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.rich-text-editor:hover {
+  border-color: var(--primary-color);
 }
 
 .rich-text-editor:focus {
@@ -254,6 +265,7 @@ button:disabled {
   margin: 10px 0;
   border-radius: 4px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  border: 1px solid #ddd;
 }
 
 .rich-text-editor.read-only {
@@ -265,5 +277,15 @@ button:disabled {
   content: attr(data-placeholder);
   color: #999;
   font-style: italic;
+  pointer-events: none;
+}
+
+/* Make sure contentEditable is visible */
+.rich-text-editor:not(.read-only) {
+  cursor: text;
+}
+
+.rich-text-editor:not(.read-only):focus {
+  cursor: text;
 }
 
