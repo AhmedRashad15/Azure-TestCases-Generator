@@ -32,84 +32,178 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
     e.preventDefault();
     const clipboardData = e.clipboardData;
 
+    if (!editorRef.current) return;
+
+    // Ensure editor has focus
+    editorRef.current.focus();
+
     // Check if clipboard contains image
-    if (clipboardData.items) {
+    if (clipboardData.items && clipboardData.items.length > 0) {
       for (let i = 0; i < clipboardData.items.length; i++) {
         const item = clipboardData.items[i];
         
-        if (item.type.indexOf("image") !== -1) {
+        // Check for image types
+        if (item.type.indexOf("image") !== -1 || item.kind === "file") {
           const blob = item.getAsFile();
-          if (blob) {
+          if (blob && blob.type.startsWith("image/")) {
             const reader = new FileReader();
             reader.onload = (event) => {
               const imageDataUrl = event.target?.result as string;
               
-              // Insert image into contentEditable div
-              if (editorRef.current) {
-                const selection = window.getSelection();
-                const range = selection?.getRangeAt(0);
-                
-                if (range) {
-                  // Create img element
-                  const img = document.createElement("img");
-                  img.src = imageDataUrl;
-                  img.style.maxWidth = "100%";
-                  img.style.height = "auto";
-                  img.style.display = "block";
-                  img.style.margin = "10px 0";
-                  
-                  // Insert image
-                  range.deleteContents();
-                  range.insertNode(img);
-                  
-                  // Move cursor after image
-                  range.setStartAfter(img);
-                  range.collapse(true);
-                  selection?.removeAllRanges();
-                  selection?.addRange(range);
-                } else {
-                  // Just append if no selection
-                  const img = document.createElement("img");
-                  img.src = imageDataUrl;
-                  img.style.maxWidth = "100%";
-                  img.style.height = "auto";
-                  img.style.display = "block";
-                  img.style.margin = "10px 0";
-                  editorRef.current.appendChild(img);
-                }
-                
-                // Update value with HTML content
-                const newContent = editorRef.current.innerHTML;
-                setContent(newContent);
-                if (onChange) {
-                  onChange(newContent);
+              if (!editorRef.current) return;
+              
+              // Create img element
+              const img = document.createElement("img");
+              img.src = imageDataUrl;
+              img.style.maxWidth = "100%";
+              img.style.height = "auto";
+              img.style.display = "block";
+              img.style.margin = "10px 0";
+              img.alt = "Pasted image";
+              
+              // Get or create selection
+              const selection = window.getSelection();
+              let range: Range | null = null;
+              
+              if (selection && selection.rangeCount > 0) {
+                range = selection.getRangeAt(0);
+                // Check if range is within our editor
+                if (!editorRef.current.contains(range.commonAncestorContainer)) {
+                  range = null;
                 }
               }
+              
+              // If no valid range, create one at the end of editor
+              if (!range) {
+                range = document.createRange();
+                if (editorRef.current.childNodes.length > 0) {
+                  range.selectNodeContents(editorRef.current);
+                  range.collapse(false); // Collapse to end
+                } else {
+                  range.setStart(editorRef.current, 0);
+                  range.setEnd(editorRef.current, 0);
+                }
+              }
+              
+              // Insert image
+              range.deleteContents();
+              range.insertNode(img);
+              
+              // Add a line break after image for better UX
+              const br = document.createElement("br");
+              range.setStartAfter(img);
+              range.insertNode(br);
+              
+              // Move cursor after the line break
+              range.setStartAfter(br);
+              range.collapse(true);
+              
+              if (selection) {
+                selection.removeAllRanges();
+                selection.addRange(range);
+              }
+              
+              // Update value with HTML content
+              const newContent = editorRef.current.innerHTML;
+              setContent(newContent);
+              if (onChange) {
+                onChange(newContent);
+              }
             };
+            
+            reader.onerror = () => {
+              console.error("Error reading image file");
+            };
+            
             reader.readAsDataURL(blob);
+            return; // Exit early since we found an image
           }
-          return;
         }
       }
     }
 
-    // Fallback: paste as plain text if no image
-    const text = clipboardData.getData("text/plain");
-    if (text && editorRef.current) {
+    // Fallback: paste as plain text or HTML if no image
+    const htmlData = clipboardData.getData("text/html");
+    const textData = clipboardData.getData("text/plain");
+    
+    if (htmlData && editorRef.current) {
+      // Paste HTML content (but sanitize images - we already handled them above)
+      const tempDiv = document.createElement("div");
+      tempDiv.innerHTML = htmlData;
+      
+      // Remove any img tags from HTML paste (we want to handle images separately)
+      const images = tempDiv.querySelectorAll("img");
+      images.forEach(img => img.remove());
+      
       const selection = window.getSelection();
-      if (selection?.rangeCount) {
-        const range = selection.getRangeAt(0);
-        range.deleteContents();
-        const textNode = document.createTextNode(text);
-        range.insertNode(textNode);
-        range.setStartAfter(textNode);
-        range.collapse(true);
-        selection.removeAllRanges();
-        selection.addRange(range);
-      } else {
-        editorRef.current.appendChild(document.createTextNode(text));
+      let range: Range | null = null;
+      
+      if (selection && selection.rangeCount > 0) {
+        range = selection.getRangeAt(0);
+        if (!editorRef.current.contains(range.commonAncestorContainer)) {
+          range = null;
+        }
       }
       
+      if (!range) {
+        range = document.createRange();
+        if (editorRef.current.childNodes.length > 0) {
+          range.selectNodeContents(editorRef.current);
+          range.collapse(false);
+        } else {
+          range.setStart(editorRef.current, 0);
+          range.setEnd(editorRef.current, 0);
+        }
+      }
+      
+      range.deleteContents();
+      while (tempDiv.firstChild) {
+        range.insertNode(tempDiv.firstChild);
+        range.setStartAfter(range.endContainer.lastChild || range.endContainer);
+      }
+      range.collapse(false);
+      
+      if (selection) {
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
+    } else if (textData && editorRef.current) {
+      // Paste as plain text
+      const selection = window.getSelection();
+      let range: Range | null = null;
+      
+      if (selection && selection.rangeCount > 0) {
+        range = selection.getRangeAt(0);
+        if (!editorRef.current.contains(range.commonAncestorContainer)) {
+          range = null;
+        }
+      }
+      
+      if (!range) {
+        range = document.createRange();
+        if (editorRef.current.childNodes.length > 0) {
+          range.selectNodeContents(editorRef.current);
+          range.collapse(false);
+        } else {
+          range.setStart(editorRef.current, 0);
+          range.setEnd(editorRef.current, 0);
+        }
+      }
+      
+      range.deleteContents();
+      const textNode = document.createTextNode(textData);
+      range.insertNode(textNode);
+      range.setStartAfter(textNode);
+      range.collapse(true);
+      
+      if (selection) {
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
+    }
+    
+    // Update value after paste
+    if (editorRef.current) {
       const newContent = editorRef.current.innerHTML;
       setContent(newContent);
       if (onChange) {
@@ -134,6 +228,19 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
       contentEditable={!readOnly}
       onPaste={handlePaste}
       onInput={handleInput}
+      onFocus={(e) => {
+        // Ensure cursor is positioned when focused
+        if (editorRef.current && !readOnly) {
+          const selection = window.getSelection();
+          if (selection && editorRef.current.childNodes.length > 0) {
+            const range = document.createRange();
+            range.selectNodeContents(editorRef.current);
+            range.collapse(false);
+            selection.removeAllRanges();
+            selection.addRange(range);
+          }
+        }
+      }}
       className={`rich-text-editor ${className} ${readOnly ? "read-only" : ""}`}
       style={{
         minHeight: "120px",
