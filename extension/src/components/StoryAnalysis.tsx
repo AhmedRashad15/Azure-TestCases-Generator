@@ -10,6 +10,7 @@ const StoryAnalysis: React.FC<StoryAnalysisProps> = ({ storyData }) => {
   const [loading, setLoading] = useState(false);
   const [analysis, setAnalysis] = useState<string>("");
   const [error, setError] = useState<string>("");
+  const [aiProvider, setAiProvider] = useState<string>("gemini");
 
   const handleAnalyze = async () => {
     setLoading(true);
@@ -20,7 +21,9 @@ const StoryAnalysis: React.FC<StoryAnalysisProps> = ({ storyData }) => {
       const response = await apiService.analyzeStory(
         storyData.title,
         storyData.description,
-        storyData.acceptance_criteria
+        storyData.acceptance_criteria,
+        undefined,
+        aiProvider
       );
 
       // Clean up HTML response
@@ -60,6 +63,21 @@ const StoryAnalysis: React.FC<StoryAnalysisProps> = ({ storyData }) => {
 
   return (
     <div>
+      <div style={{ marginBottom: "10px" }}>
+        <label htmlFor="ai-provider-analysis" style={{ marginRight: "10px" }}>
+          AI Provider:
+        </label>
+        <select
+          id="ai-provider-analysis"
+          value={aiProvider}
+          onChange={(e) => setAiProvider(e.target.value)}
+          disabled={loading}
+          style={{ padding: "5px", fontSize: "14px" }}
+        >
+          <option value="gemini">Google Gemini</option>
+          <option value="claude">Anthropic Claude</option>
+        </select>
+      </div>
       <button onClick={handleAnalyze} disabled={loading}>
         {loading && <span className="spinner" />}
         {loading ? "Analyzing..." : "Analyze User Story"}

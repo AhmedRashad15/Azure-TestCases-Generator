@@ -7,6 +7,7 @@ from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
 from dotenv import load_dotenv
 import google.generativeai as genai
+import anthropic
 from azure.devops.connection import Connection
 from msrest.authentication import BasicAuthentication
 import json
@@ -29,6 +30,14 @@ gemini_api_key = os.getenv("GEMINI_API_KEY")
 if not gemini_api_key:
     raise ValueError("GEMINI_API_KEY not found in .env file")
 genai.configure(api_key=gemini_api_key)
+
+# Configure Claude API
+claude_api_key = os.getenv("CLAUDE_API_KEY")
+if not claude_api_key:
+    print("WARNING: CLAUDE_API_KEY not found in .env file. Claude features will be unavailable.")
+claude_client = None
+if claude_api_key:
+    claude_client = anthropic.Anthropic(api_key=claude_api_key)
 
 # Flask App with CORS support
 app = Flask(__name__)
@@ -136,6 +145,195 @@ def index():
         'status': 'running'
     }), 200
 
+def call_ai_provider(ai_provider, prompt, images=None):
+    """
+    Call either Gemini or Claude API based on provider selection.
+    Returns the text response from the AI.
+    """
+    ai_provider = ai_provider.lower() if ai_provider else 'gemini'
+    
+    if ai_provider == 'claude':
+        if not claude_client:
+            raise ValueError("Claude API is not configured. Please set CLAUDE_API_KEY in environment variables.")
+        
+        # Claude API message format - build content array with text and images
+        content = []
+        
+        # Add text prompt first
+        content.append({"type": "text", "text": prompt})
+        
+        # Add images if provided
+        if images and len(images) > 0:
+            print(f"DEBUG: Converting {len(images)} images to base64 for Claude API")
+            for idx, image in enumerate(images):
+                try:
+                    # Convert PIL Image to base64
+                    buffered = BytesIO()
+                    
+                    # Detect format and save accordingly
+                    # Claude supports: image/jpeg, image/png, image/gif, image/webp
+                    if image.format:
+                        format_name = image.format.upper()
+                        if format_name == 'JPEG':
+                            image.save(buffered, format="JPEG")
+                            media_type = "image/jpeg"
+                        elif format_name == 'PNG':
+                            image.save(buffered, format="PNG")
+                            media_type = "image/png"
+                        elif format_name == 'GIF':
+                            image.save(buffered, format="GIF")
+                            media_type = "image/gif"
+                        elif format_name == 'WEBP':
+                            image.save(buffered, format="WEBP")
+                            media_type = "image/webp"
+                        else:
+                            # Default to PNG if format is unknown
+                            image.save(buffered, format="PNG")
+                            media_type = "image/png"
+                    else:
+                        # No format detected, default to PNG
+                        image.save(buffered, format="PNG")
+                        media_type = "image/png"
+                    
+                    # Encode to base64
+                    img_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
+                    
+                    # Add image to content array
+                    content.append({
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": media_type,
+                            "data": img_base64
+                        }
+                    })
+                    print(f"DEBUG: Added image {idx + 1} to Claude message (format: {media_type})")
+                except Exception as e:
+                    print(f"WARNING: Failed to convert image {idx + 1} to base64: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    # Continue with other images even if one fails
+        
+        # Create message with content array
+        messages = [{"role": "user", "content": content}]
+        
+        # Try different Claude models in order of preference
+        claude_models = [
+            "claude-3-5-sonnet-20240620",
+            "claude-3-5-haiku-20241022",
+            "claude-3-opus-20240229",
+            "claude-3-sonnet-20240229"
+        ]
+        
+        last_error = None
+        for model_name in claude_models:
+            try:
+                print(f"DEBUG: Trying Claude model: {model_name}")
+                # Use higher max_tokens for test case generation (can be large JSON arrays)
+                max_tokens = 8192 if 'test case' in str(prompt).lower() or 'json array' in str(prompt).lower() else 4096
+                print(f"DEBUG: Using max_tokens={max_tokens} for Claude API call")
+                response = claude_client.messages.create(
+                    model=model_name,
+                    max_tokens=max_tokens,
+                    messages=messages
+                )
+                
+                # Extract text from Claude response
+                if hasattr(response, 'content') and response.content:
+                    text_parts = []
+                    for content_block in response.content:
+                        if hasattr(content_block, 'text'):
+                            text_parts.append(content_block.text)
+                    result = ''.join(text_parts).strip()
+                    if result:
+                        print(f"DEBUG: Successfully used Claude model: {model_name}")
+                        return result
+                
+                raise ValueError("Empty response from Claude API")
+            except Exception as e:
+                last_error = e
+                error_str = str(e)
+                # If it's a model not found error, try next model
+                if 'not_found_error' in error_str or '404' in error_str or 'model' in error_str.lower():
+                    print(f"DEBUG: Model {model_name} not available, trying next model...")
+                    continue
+                else:
+                    # For other errors, re-raise immediately
+                    raise
+        
+        # If all models failed, raise the last error
+        if last_error:
+            raise ValueError(f"All Claude models failed. Last error: {str(last_error)}")
+        else:
+            raise ValueError("Failed to get response from Claude API")
+    
+    else:  # Default to Gemini
+        try:
+            model = genai.GenerativeModel('gemini-flash-latest')
+            
+            # Build content array with text and images
+            content_parts = [prompt]
+            if images and len(images) > 0:
+                print(f"DEBUG: Adding {len(images)} images to Gemini request")
+                for image in images:
+                    content_parts.append(image)
+            
+            # Send to Gemini with error handling
+            print(f"DEBUG: Sending request to Gemini with {len(content_parts)} content parts")
+            try:
+                if images and len(images) > 0:
+                    response = model.generate_content(content_parts)
+                else:
+                    response = model.generate_content(prompt)
+            except Exception as api_error:
+                print(f"ERROR: Gemini API call failed: {api_error}")
+                import traceback
+                traceback.print_exc()
+                raise ValueError(f"Gemini API call failed: {str(api_error)}")
+            
+            print(f"DEBUG: Gemini response received, type: {type(response)}")
+            
+            # Check for blocking reasons
+            if hasattr(response, 'prompt_feedback'):
+                feedback = response.prompt_feedback
+                if hasattr(feedback, 'block_reason') and feedback.block_reason:
+                    raise ValueError(f"Gemini blocked the request: {feedback.block_reason}")
+            
+            # Extract text from Gemini response
+            if hasattr(response, 'text'):
+                result = response.text.strip()
+                if not result:
+                    raise ValueError("Gemini returned empty response")
+                print(f"DEBUG: Extracted text from Gemini response.text, length: {len(result)}")
+                return result
+            else:
+                # Try to get text from candidates
+                print(f"DEBUG: response.text not available, trying candidates...")
+                if hasattr(response, 'candidates') and response.candidates:
+                    if hasattr(response.candidates[0], 'content'):
+                        if hasattr(response.candidates[0].content, 'parts'):
+                            parts = response.candidates[0].content.parts
+                            result = ''.join([part.text for part in parts if hasattr(part, 'text')]).strip()
+                            print(f"DEBUG: Extracted text from candidates[0].content.parts, length: {len(result)}")
+                            return result
+                        else:
+                            result = str(response.candidates[0].content).strip()
+                            print(f"DEBUG: Extracted text from candidates[0].content, length: {len(result)}")
+                            return result
+                    else:
+                        result = str(response.candidates[0]).strip()
+                        print(f"DEBUG: Extracted text from candidates[0], length: {len(result)}")
+                        return result
+                else:
+                    result = str(response).strip()
+                    print(f"DEBUG: Fallback: extracted text from response string, length: {len(result)}")
+                    return result
+        except Exception as gemini_error:
+            print(f"ERROR in Gemini API call: {gemini_error}")
+            import traceback
+            traceback.print_exc()
+            raise ValueError(f"Gemini API error: {str(gemini_error)}")
+
 @app.route('/health', methods=['GET'])
 def health():
     """Health check endpoint"""
@@ -160,16 +358,16 @@ def analyze_story():
         story_description = data.get('story_description', '')
         acceptance_criteria = data.get('acceptance_criteria', '')
         related_test_cases = data.get('related_test_cases', '')
+        ai_provider = data.get('ai_provider', 'gemini')  # Default to Gemini
         
         print(f"DEBUG: Story title: {story_title}")
         print(f"DEBUG: Story description length: {len(story_description)}")
         print(f"DEBUG: Acceptance criteria length: {len(acceptance_criteria)}")
+        print(f"DEBUG: AI Provider: {ai_provider}")
         
         if not story_title:
             print("ERROR: Story title is missing")
             return jsonify({'error': 'Story Title is required.'}), 400
-        
-        model = genai.GenerativeModel('gemini-flash-latest')  # Free tier model that supports images
         
         # Extract images and text from HTML fields
         desc_images, desc_text = extract_images_from_html(story_description)
@@ -177,7 +375,8 @@ def analyze_story():
         
         # Collect all images
         all_images = desc_images + ac_images
-        print(f"DEBUG: Found {len(all_images)} images to send to Gemini")
+        provider_name = "Gemini" if ai_provider.lower() != 'claude' else "Claude"
+        print(f"DEBUG: Found {len(all_images)} images to send to {provider_name}")
         
         # Build the prompt for analysis
         test_cases_section = ""
@@ -240,16 +439,44 @@ Keep these as **short, clear bullet points**.
 ### 🟨 3. Ambiguities & Clarification Questions
 **CRITICAL: You must thoroughly analyze EACH acceptance criteria rule AND ALL provided images.**
 
+**Ambiguity Detection Strategy:**
+Review the following user story and identify any ambiguous or unclear parts that could cause confusion during testing or implementation.
+
+Highlight vague terms, missing details, or assumptions that are not explicitly stated.
+
+Focus on unclear acceptance criteria, incomplete conditions, or subjective words that could be interpreted in multiple ways.
+
+**SPECIFICALLY LOOK FOR CONTRADICTIONS AND LOGICAL INCONSISTENCIES:**
+- **Contradictory statements within the same rule:** Does the rule say one thing but then contradict itself in parentheses, notes, or additional clauses?
+- **Status/state contradictions:** Does the rule mention a status change (e.g., "status will be approved") but then state that no approval is needed? This is a logical contradiction.
+- **Parenthetical contradictions:** Pay special attention to text in parentheses, brackets, or notes that contradicts the main statement (e.g., "status will be approved (No need to be approved)").
+- **Workflow inconsistencies:** Does the described workflow or process contradict the expected outcome or status?
+- **Permission/role contradictions:** Does the rule assign permissions or roles that conflict with the described action or status?
+- **Conditional logic conflicts:** Are there "if-then" statements where the condition and outcome don't logically align?
+
+Provide each ambiguous point as a short, clear statement.
+
 For each ambiguity found, provide:
-- **Ambiguity:** Clear description of what's unclear, missing, or contradictory
+- **Ambiguity:** Clear description of what's unclear, missing, or contradictory (specifically highlight contradictions if found)
 - **Question:** Specific question to ask the Product Owner to clarify this
 
 Analyze:
-- Every acceptance criteria rule individually for completeness and clarity
+- Every acceptance criteria rule individually for completeness, clarity, AND internal consistency
+- **Contradictions:** Compare the main statement with any parenthetical notes, brackets, or additional clauses in the SAME rule
+- **Status changes:** Verify that status changes align with the described process (e.g., if status becomes "approved", ensure the process actually involves approval)
+- **Logical flow:** Check if the described workflow logically leads to the stated outcome
 - All images for visual elements not documented in text
 - Any discrepancies between images and written requirements
 - Missing information in acceptance criteria that images reveal
 - UI states, validations, error handling, edge cases not explicitly stated
+- Vague terms, missing details, or assumptions that are not explicitly stated
+- Subjective words that could be interpreted in multiple ways
+- Incomplete conditions or unclear requirements
+
+**Example of contradiction to catch:**
+- Rule: "The modifications are done by the user who has permission to edit or approve, and the status will be approved (No need to be approved by anyone in this stage)"
+- **Ambiguity:** The rule states the status will be "approved" but then contradicts this by saying "No need to be approved by anyone". If no approval is needed, why does the status become "approved"?
+- **Question:** Should the status be "approved" automatically without approval, or should it be a different status (e.g., "completed", "submitted") that doesn't imply approval?
 
 Keep this section clear and easy to read — one ambiguity and one question per bullet point.
 
@@ -328,46 +555,16 @@ Here is the preferred HTML structure template (use this for formatting your resp
 6. Reference specific images when identifying ambiguities (e.g., "In Image 1, there is a [element] that is not mentioned in acceptance criteria...")
 """
         
-        print(f"DEBUG: Calling Gemini API for analysis...")
+        print(f"DEBUG: Calling {provider_name} API for analysis...")
         print(f"DEBUG: Prompt length: {len(prompt)}")
         print(f"DEBUG: Number of images: {len(all_images)}")
         
-        # Build content array with text and images
-        content_parts = [prompt]
-        for image in all_images:
-            content_parts.append(image)
-        
-        # Send to Gemini with multimodal content
-        if len(all_images) > 0:
-            response = model.generate_content(content_parts)
-            print(f"DEBUG: Sent {len(all_images)} images to Gemini")
-        else:
-            response = model.generate_content(prompt)
-        
-        print(f"DEBUG: Gemini response type: {type(response)}")
-        
-        # Extract text from response
+        # Use the helper function to call the appropriate AI provider
         try:
-            if hasattr(response, 'text'):
-                analysis_text = response.text.strip()
-            else:
-                # Try to get text from candidates
-                print(f"DEBUG: Response doesn't have 'text' attribute, trying candidates...")
-                if hasattr(response, 'candidates') and response.candidates:
-                    if hasattr(response.candidates[0], 'content'):
-                        if hasattr(response.candidates[0].content, 'parts'):
-                            parts = response.candidates[0].content.parts
-                            analysis_text = ''.join([part.text for part in parts if hasattr(part, 'text')]).strip()
-                        else:
-                            analysis_text = str(response.candidates[0].content).strip()
-                    else:
-                        analysis_text = str(response.candidates[0]).strip()
-                else:
-                    analysis_text = str(response).strip()
-                    print(f"WARNING: Using fallback string conversion")
+            analysis_text = call_ai_provider(ai_provider, prompt, all_images if len(all_images) > 0 else None)
             
             if not analysis_text:
-                raise ValueError("Empty analysis response from Gemini API")
+                raise ValueError(f"Empty analysis response from {provider_name} API")
             
             # Clean up the response - remove markdown code blocks if present
             analysis_text = analysis_text.strip()
@@ -385,7 +582,7 @@ Here is the preferred HTML structure template (use this for formatting your resp
             print(f"ERROR extracting text from response: {extract_error}")
             import traceback
             traceback.print_exc()
-            raise ValueError(f"Failed to extract text from Gemini response: {str(extract_error)}")
+            raise ValueError(f"Failed to extract text from {provider_name} response: {str(extract_error)}")
         
         return jsonify({'analysis': analysis_text})
     except Exception as e:
@@ -394,9 +591,23 @@ Here is the preferred HTML structure template (use this for formatting your resp
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
-def _generate_cases_for_type(model, story_title, story_description, acceptance_criteria, data_dictionary, case_type, related_stories=None, images=None):
-    """Generate test cases for a specific type, optionally including images"""
-    print(f"DEBUG: _generate_cases_for_type called for {case_type}. related_stories:", related_stories)
+def _generate_cases_for_type(ai_provider, story_title, story_description, acceptance_criteria, data_dictionary, case_type, related_stories=None, images=None, ambiguity_aware=True):
+    """Generate test cases for a specific type, optionally including images
+    
+    Args:
+        ai_provider: AI provider to use ('gemini' or 'claude')
+        story_title: Title of the user story
+        story_description: Description of the user story
+        acceptance_criteria: Acceptance criteria text
+        data_dictionary: Data dictionary text
+        case_type: Type of test cases to generate ('Positive', 'Negative', 'Edge Case', 'Data Flow')
+        related_stories: List of related user stories
+        images: List of PIL Image objects
+        ambiguity_aware: If True, include ambiguity-aware test case generation (default: True)
+    """
+    ai_provider = ai_provider.lower() if ai_provider else 'gemini'
+    print(f"DEBUG: _generate_cases_for_type called for {case_type} using {ai_provider}. related_stories:", related_stories)
+    print(f"DEBUG: Ambiguity-aware generation: {ambiguity_aware}")
     if images:
         print(f"DEBUG: Including {len(images)} images in test case generation")
     guideline_map = {
@@ -433,6 +644,50 @@ def _generate_cases_for_type(model, story_title, story_description, acceptance_c
         related_block = f"\n**Instruction:** {related_instruction}\n**Related User Stories:**\n" + "\n".join([
             f"- Title: {r.get('title', '')}\n  Description: {r.get('description', '')}\n  Acceptance Criteria: {r.get('acceptance_criteria', '')}" for r in related_stories
         ])
+    
+    # Build ambiguity-aware section conditionally
+    ambiguity_section = ""
+    if ambiguity_aware:
+        ambiguity_section = """
+**AMBIGUITY-AWARE TEST CASE GENERATION:**
+When generating test cases, pay special attention to any ambiguities, contradictions, or unclear requirements in the acceptance criteria. These ambiguities should inform your test case generation, BUT with limits and prioritization:
+
+**IMPORTANT LIMITS AND PRIORITIZATION:**
+- **Maximum 2-3 test cases per identified ambiguity** - Don't generate excessive test cases for the same ambiguity
+- **Prioritize critical contradictions** - Focus on logical inconsistencies that would cause implementation confusion first
+- **Consolidate similar scenarios** - If multiple test cases would verify similar things, combine them into one comprehensive test case
+- **Quality over quantity** - Generate fewer, high-quality test cases rather than many redundant ones
+- **Focus on testable ambiguities** - Only generate test cases for ambiguities that can actually be verified through testing
+
+1. **Contradictions and Logical Inconsistencies (HIGH PRIORITY):**
+   - If you find contradictory statements (e.g., "status will be approved" but "no approval needed"), create **maximum 2-3 test cases** that cover the most critical interpretations
+   - Prioritize test cases that verify the most likely scenario AND one alternative interpretation
+   - Focus on contradictions that would cause the most confusion during implementation
+   - **Example:** "status will be approved (No need to be approved)" → Generate 2 test cases:
+     * One verifying status becomes "approved" automatically (most likely interpretation)
+     * One verifying the workflow doesn't require approval step (clarifying the contradiction)
+
+2. **Vague Terms and Multiple Interpretations (MEDIUM PRIORITY):**
+   - If requirements use vague terms (e.g., "quickly", "appropriate", "user-friendly"), create **maximum 1-2 test cases** for the most critical interpretations
+   - Focus on boundary conditions that are most likely to cause issues
+   - Prioritize vague terms that affect core functionality over minor UI concerns
+
+3. **Missing Information (MEDIUM PRIORITY):**
+   - If information is missing (e.g., no error handling specified), create **maximum 1-2 test cases** for the most critical missing scenarios
+   - Focus on missing information that affects core functionality or security
+   - Prioritize common edge cases that are likely to occur
+
+4. **Status/State Ambiguities (HIGH PRIORITY):**
+   - If status changes are ambiguous or contradictory, create **maximum 2 test cases** that verify the most critical status transitions
+   - Focus on status changes that affect workflow or business logic
+   - Prioritize contradictions over simple ambiguities
+
+5. **Permission/Role Ambiguities (HIGH PRIORITY):**
+   - If permissions or roles are unclear, create **maximum 2 test cases** for the most critical permission scenarios
+   - Focus on security-critical ambiguities first
+   - Prioritize scenarios that could lead to unauthorized access
+"""
+    
     prompt = f"""
 You are an expert test case generator for Azure DevOps with a focus on comprehensive test coverage. Your task is to generate a JSON array of ONLY the **{case_type}** test cases for the user story below.
 
@@ -445,11 +700,17 @@ You are an expert test case generator for Azure DevOps with a focus on comprehen
 
 **IMAGES PROVIDED:**
 If images are included with the user story, please analyze them carefully and reference their content when generating test cases. The images may show UI mockups, workflows, or visual requirements that should be covered in the test cases.
-
+{ambiguity_section}
 **Universal Guidelines:**
 1. **Descriptive Titles:** Create specific, action-oriented titles that clearly describe what functionality is being tested. Avoid generic titles like "Test login" - instead use "User can successfully login with valid email and password".
 2. **Consistency First:** For any '{case_type}' test, the `title`, `description`, and `expectedResult` must all be consistent with that scenario. For example, a 'Negative' test's title must describe a failure condition, and its expected result must describe the correct error handling.
 3. **Single Condition:** Each test case must focus on verifying exactly ONE condition or scenario. Do not combine multiple test conditions.
+4. **Ambiguity Coverage:** When ambiguities exist, create test cases that help clarify them through testing. However, follow these guidelines:
+   - **Limit:** Maximum 2-3 test cases per identified ambiguity
+   - **Prioritize:** Focus on critical contradictions and high-impact ambiguities first
+   - **Consolidate:** Merge similar test cases rather than creating duplicates
+   - **Quality:** Generate fewer, high-quality test cases rather than many redundant ones
+   - **Testability:** Only generate test cases for ambiguities that can actually be verified through testing
 
 **Mobile Application Guidelines (Apply if context is a mobile app):**
 - If a scenario applies to both iOS and Android, write a single, consolidated test case.
@@ -482,24 +743,66 @@ Each test case in the JSON array must have the following fields:
 Now, generate ONLY the `{case_type}` test cases based on all these instructions.
 
 - Do not generate duplicate test cases. Each test case must be unique in its condition, steps, and expected result.
+
+**CRITICAL: You MUST return ONLY a valid JSON array. Do not include any explanatory text, markdown formatting, or code blocks. Return ONLY the JSON array starting with [ and ending with ].**
 """
     try:
-        # Build content array with text and images
-        if images and len(images) > 0:
-            content_parts = [prompt]
-            content_parts.extend(images)
-            response = model.generate_content(content_parts)
-            print(f"DEBUG: Sent {len(images)} images to Gemini for {case_type} test cases")
-        else:
-            response = model.generate_content(prompt)
+        # Use the helper function to call the appropriate AI provider
+        response_text = call_ai_provider(ai_provider, prompt, images if images and len(images) > 0 else None)
         
-        print(f"Raw Gemini response for {case_type}:\n{response.text}\n--- End Response ---\n")
+        provider_name = "Gemini" if ai_provider != 'claude' else "Claude"
+        print(f"DEBUG: Raw {provider_name} response for {case_type} (length: {len(response_text)}):\n{response_text[:500]}...\n--- End Response Preview ---\n")
+        
+        if not response_text or len(response_text.strip()) == 0:
+            print(f"ERROR: Empty response from {provider_name} for {case_type}")
+            return "[]"
+        
         # Clean the response to get a clean JSON array string
-        clean_json_text = response.text.strip().replace('```json', '').replace('```', '').strip()
+        # Remove markdown code blocks
+        clean_json_text = response_text.strip()
+        
+        # Remove markdown code block markers
+        if clean_json_text.startswith('```'):
+            # Find the first newline after ```
+            lines = clean_json_text.split('\n')
+            if lines[0].startswith('```'):
+                # Remove first line (```json or ```)
+                lines = lines[1:]
+            # Remove last line if it's just ```
+            if lines and lines[-1].strip() == '```':
+                lines = lines[:-1]
+            clean_json_text = '\n'.join(lines).strip()
+        
+        # Try to find JSON array in the response
+        # Look for array pattern: [ ... ]
+        json_match = re.search(r'\[.*\]', clean_json_text, re.DOTALL)
+        if json_match:
+            clean_json_text = json_match.group(0)
+            print(f"DEBUG: Extracted JSON array from {provider_name} response (length: {len(clean_json_text)})")
+        else:
+            print(f"WARNING: No JSON array found in {provider_name} response. Full response:\n{clean_json_text[:1000]}")
+            # Try to parse as-is anyway
+            pass
+        
+        # Validate JSON before returning
+        try:
+            test_parse = json.loads(clean_json_text)
+            if not isinstance(test_parse, list):
+                print(f"ERROR: {provider_name} response is not a JSON array. Type: {type(test_parse)}")
+                return "[]"
+            if len(test_parse) == 0:
+                print(f"WARNING: {provider_name} returned empty array for {case_type}")
+            else:
+                print(f"DEBUG: Successfully parsed {len(test_parse)} test cases from {provider_name} for {case_type}")
+        except json.JSONDecodeError as json_err:
+            print(f"ERROR: Invalid JSON from {provider_name} for {case_type}: {json_err}")
+            print(f"DEBUG: Attempted to parse: {clean_json_text[:500]}...")
+            return "[]"
+        
         return clean_json_text
     except Exception as e:
         import traceback
-        print(f"Error generating {case_type} cases: {e}")
+        print(f"ERROR generating {case_type} cases: {e}")
         traceback.print_exc()
         return "[]"
 
@@ -539,11 +842,10 @@ def generate_test_cases_stream():
         acceptance_criteria = data.get('acceptance_criteria')
         data_dictionary = data.get('data_dictionary', '')
         related_stories = data.get('related_stories', [])
+        ai_provider = data.get('ai_provider', 'gemini')  # Default to Gemini
         
         if not all([story_title, acceptance_criteria]):
             return Response("Story Title and Acceptance Criteria are required.", status=400)
-        
-        model = genai.GenerativeModel('gemini-flash-latest')  # Free tier model that supports images
         
         # Extract images and text from HTML fields
         desc_images, desc_text = extract_images_from_html(story_description)
@@ -555,33 +857,94 @@ def generate_test_cases_stream():
         print(f"DEBUG: Found {len(all_images)} images for test case generation")
         
         def generate():
-            case_types = ["Positive", "Negative", "Edge Case", "Data Flow"]
-            all_test_cases = []
+            try:
+                case_types = ["Positive", "Negative", "Edge Case", "Data Flow"]
+                all_test_cases = []
 
-            for case_type in case_types:
-                print(f"DEBUG: Calling _generate_cases_for_type for {case_type} with related_stories:", related_stories)
-                # Generate cases for the current type, including images
-                json_text_chunk = _generate_cases_for_type(model, story_title, desc_text, ac_text, dict_text, case_type, related_stories, all_images)
+                # Get ambiguity_aware setting from request (default: True for backward compatibility)
+                ambiguity_aware = data.get('ambiguity_aware', True)
+                if isinstance(ambiguity_aware, str):
+                    ambiguity_aware = ambiguity_aware.lower() in ('true', '1', 'yes', 'on')
                 
-                # The API might return an empty or invalid string, so we validate it
-                try:
-                    # Validate if it's proper JSON
-                    parsed_chunk = json.loads(json_text_chunk)
-                    if isinstance(parsed_chunk, list) and parsed_chunk:
-                        all_test_cases.extend(parsed_chunk)
-                        # Stream the current progress back to the client
-                        progress_data = {
-                            "type": case_type,
-                            "cases": parsed_chunk,
-                            "progress": f"Generated {len(parsed_chunk)} {case_type} cases."
+                for case_type in case_types:
+                    try:
+                        print(f"DEBUG: Calling _generate_cases_for_type for {case_type} with related_stories:", related_stories)
+                        # Generate cases for the current type, including images
+                        json_text_chunk = _generate_cases_for_type(ai_provider, story_title, desc_text, ac_text, dict_text, case_type, related_stories, all_images, ambiguity_aware)
+                        
+                        # The API might return an empty or invalid string, so we validate it
+                        try:
+                            # Validate if it's proper JSON
+                            parsed_chunk = json.loads(json_text_chunk)
+                            if isinstance(parsed_chunk, list):
+                                if parsed_chunk:
+                                    all_test_cases.extend(parsed_chunk)
+                                    # Stream the current progress back to the client
+                                    progress_data = {
+                                        "type": case_type,
+                                        "cases": parsed_chunk,
+                                        "progress": f"Generated {len(parsed_chunk)} {case_type} cases."
+                                    }
+                                    yield f"data: {json.dumps(progress_data)}\n\n"
+                                else:
+                                    print(f"WARNING: {case_type} returned empty array. Response was: {json_text_chunk[:200]}")
+                                    # Still send progress even if empty
+                                    progress_data = {
+                                        "type": case_type,
+                                        "cases": [],
+                                        "progress": f"No {case_type} cases generated."
+                                    }
+                                    yield f"data: {json.dumps(progress_data)}\n\n"
+                            else:
+                                print(f"ERROR: Response for {case_type} is not a list. Type: {type(parsed_chunk)}")
+                                error_data = {
+                                    "type": "error",
+                                    "case_type": case_type,
+                                    "error": f"Response for {case_type} is not a JSON array",
+                                    "message": f"Expected list, got {type(parsed_chunk).__name__}"
+                                }
+                                yield f"data: {json.dumps(error_data)}\n\n"
+                        except json.JSONDecodeError as json_err:
+                            print(f"ERROR: Could not decode JSON for {case_type} cases.")
+                            print(f"DEBUG: JSON Error: {json_err}")
+                            print(f"DEBUG: Response text (first 500 chars): {json_text_chunk[:500]}")
+                            # Send error to client
+                            error_data = {
+                                "type": "error",
+                                "case_type": case_type,
+                                "error": f"Failed to parse JSON response for {case_type} cases",
+                                "message": str(json_err)
+                            }
+                            yield f"data: {json.dumps(error_data)}\n\n"
+                            continue
+                    except Exception as case_error:
+                        import traceback
+                        print(f"ERROR generating {case_type} cases: {case_error}")
+                        traceback.print_exc()
+                        # Send error to client but continue with other case types
+                        error_data = {
+                            "type": "error",
+                            "case_type": case_type,
+                            "error": f"Failed to generate {case_type} cases",
+                            "message": str(case_error)
                         }
-                        yield f"data: {json.dumps(progress_data)}\n\n"
-                except json.JSONDecodeError:
-                    print(f"Warning: Could not decode JSON for {case_type} cases. Skipping.")
-                    continue
-            
-            print("--- Finished generating all test cases. ---")
-            yield "data: {\"type\": \"done\", \"message\": \"All test cases generated.\"}\n\n"
+                        yield f"data: {json.dumps(error_data)}\n\n"
+                        continue
+                
+                print("--- Finished generating all test cases. ---")
+                yield "data: {\"type\": \"done\", \"message\": \"All test cases generated.\"}\n\n"
+            except Exception as gen_error:
+                import traceback
+                print(f"CRITICAL ERROR in generate() function: {gen_error}")
+                traceback.print_exc()
+                # Send final error message
+                error_data = {
+                    "type": "error",
+                    "error": "Critical error during test case generation",
+                    "message": str(gen_error)
+                }
+                yield f"data: {json.dumps(error_data)}\n\n"
+                yield "data: {\"type\": \"done\", \"message\": \"Generation failed.\"}\n\n"
         
         response = Response(generate(), mimetype='text/event-stream')
         response.headers['Access-Control-Allow-Origin'] = '*'
@@ -597,6 +960,10 @@ def generate_test_cases_stream():
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
+    # Azure App Service uses PORT environment variable (defaults to 8000)
+    # For local development, use 5000
     port = int(os.getenv('PORT', 5000))
-    app.run(debug=True, host='0.0.0.0', port=port)
+    # Azure requires debug=False in production
+    debug_mode = os.getenv('FLASK_DEBUG', 'False').lower() == 'true'
+    app.run(debug=debug_mode, host='0.0.0.0', port=port)
 

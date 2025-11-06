@@ -24,28 +24,218 @@ export interface TestCase {
 }
 
 class AzureDevOpsService {
+  /**
+   * Extract organization URL and project name
+   * Azure DevOps extensions receive project info via URL parameters or referrer
+   */
+  private async getOrgUrlAndProject(): Promise<{ orgUrl: string; projectName: string }> {
+    let orgUrl = "";
+    let projectName = "";
+    
+    // Step 0: Use Azure DevOps SDK to get org URL and project (works even in iframe)
+    try {
+      const host = SDK.getHost();
+      const hostUri = (host as any).uri || (host as any).url || "";
+      if (hostUri && !hostUri.includes("vsassets") && !hostUri.includes("gallerycdn")) {
+        if (hostUri.includes("visualstudio.com")) {
+          const m = hostUri.match(/https?:\/\/[^/]+\.visualstudio\.com/);
+          if (m) orgUrl = m[0];
+        } else if (hostUri.includes("dev.azure.com")) {
+          const m = hostUri.match(/https?:\/\/dev\.azure\.com\/[^/]+/);
+          if (m) orgUrl = m[0];
+        }
+      }
+      // Try ProjectPageService for project name
+      try {
+        const projectService = await (SDK as any).getService((SDK as any).CommonServiceIds?.ProjectPageService || "ms.vss-tfs-web.tfs-page-data-service");
+        if (projectService && projectService.getProject) {
+          const prj = await projectService.getProject();
+          if (prj && prj.name) {
+            projectName = prj.name;
+          }
+        }
+      } catch (e) {
+        // ignore and continue with other strategies
+      }
+    } catch (e) {
+      // ignore and continue
+    }
+    
+    // Step 1: Extract from document.referrer (most reliable)
+    if (typeof document !== 'undefined' && document.referrer) {
+      const referrer = document.referrer;
+      console.log("Document referrer:", referrer);
+      
+      // Extract org URL
+      if (referrer.includes('visualstudio.com')) {
+        const match = referrer.match(/https?:\/\/[^\/]+\.visualstudio\.com/);
+        if (match) {
+          orgUrl = match[0];
+          console.log("Extracted org URL from referrer:", orgUrl);
+          
+          // Extract project name from referrer URL path
+          // Format: https://org.visualstudio.com/ProjectName/...
+          try {
+            const urlObj = new URL(referrer);
+            const pathParts = urlObj.pathname.split('/').filter(p => p && !p.startsWith('_'));
+            
+            // Skip common Azure DevOps paths
+            const skipPaths = ['extensions', '_apps', '_work', '_admin', '_settings'];
+            const orgName = orgUrl.match(/https?:\/\/([^\/]+)\.visualstudio\.com/)?.[1]?.toLowerCase() || "";
+            
+            for (const part of pathParts) {
+              const partLower = part.toLowerCase();
+              if (!skipPaths.includes(partLower) && partLower !== orgName) {
+                projectName = decodeURIComponent(part);
+                console.log("Extracted project name from referrer:", projectName);
+                break;
+              }
+            }
+          } catch (e) {
+            console.log("Error parsing referrer URL:", e);
+          }
+        }
+      } else if (referrer.includes('dev.azure.com')) {
+        const match = referrer.match(/https?:\/\/dev\.azure\.com\/[^\/]+/);
+        if (match) {
+          orgUrl = match[0];
+          console.log("Extracted org URL from referrer:", orgUrl);
+          
+          // Extract project name from dev.azure.com URL
+          // Format: https://dev.azure.com/org/ProjectName/...
+          try {
+            const urlObj = new URL(referrer);
+            const pathParts = urlObj.pathname.split('/').filter(p => p && !p.startsWith('_'));
+            
+            const skipPaths = ['extensions', '_apps', '_work', '_admin', '_settings'];
+            const orgName = orgUrl.match(/https?:\/\/dev\.azure\.com\/([^\/]+)/)?.[1]?.toLowerCase() || "";
+            
+            // First part after org is usually the project name
+            for (const part of pathParts) {
+              const partLower = part.toLowerCase();
+              if (!skipPaths.includes(partLower) && partLower !== orgName) {
+                projectName = decodeURIComponent(part);
+                console.log("Extracted project name from referrer:", projectName);
+                break;
+              }
+            }
+          } catch (e) {
+            console.log("Error parsing referrer URL:", e);
+          }
+        }
+      }
+    }
+    
+    // Step 2: Try URL parameters (Azure DevOps may pass project as query param)
+    if (!projectName && typeof window !== 'undefined' && window.location) {
+      const urlParams = new URLSearchParams(window.location.search);
+      const projectParam = urlParams.get("project") || urlParams.get("projectId");
+      if (projectParam) {
+        projectName = decodeURIComponent(projectParam);
+        console.log("Got project name from URL parameter:", projectName);
+      }
+    }
+    
+    // Step 3: Fallback - use REST API if we have orgUrl but no projectName
+    if (orgUrl && !projectName) {
+      try {
+        const accessToken = await SDK.getAccessToken();
+        if (accessToken) {
+          // Get all projects and try to match from referrer path
+          const projectsUrl = `${orgUrl}/_apis/projects?api-version=7.1`;
+          const response = await fetch(projectsUrl, {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+            },
+          });
+          
+          if (response.ok) {
+            const projectsData = await response.json();
+            if (projectsData.value && projectsData.value.length > 0) {
+              // Try to extract from referrer one more time with better parsing
+              const referrer = document.referrer || "";
+              if (referrer) {
+                try {
+                  const urlObj = new URL(referrer);
+                  const pathParts = urlObj.pathname.split('/').filter(p => p && !p.startsWith('_'));
+                  const skipPaths = ['extensions', '_apps', '_work', '_admin', '_settings'];
+                  const orgName = orgUrl.match(/https?:\/\/([^\/]+)\.(?:visualstudio\.com|dev\.azure\.com\/[^\/]+)/)?.[1]?.toLowerCase() || "";
+                  
+                  for (const part of pathParts) {
+                    const partLower = part.toLowerCase();
+                    if (!skipPaths.includes(partLower) && partLower !== orgName) {
+                      const candidate = decodeURIComponent(part);
+                      // Check if this project exists
+                      const found = projectsData.value.find((p: any) => 
+                        p.name.toLowerCase() === candidate.toLowerCase()
+                      );
+                      if (found) {
+                        projectName = found.name; // Use the exact name from API
+                        console.log("Matched project from API:", projectName);
+                        break;
+                      }
+                    }
+                  }
+                } catch (e) {
+                  console.log("Error matching project:", e);
+                }
+              }
+              
+              // If still no project and only one exists, use it
+              if (!projectName && projectsData.value.length === 1) {
+                projectName = projectsData.value[0].name;
+                console.log("Using single project from API:", projectName);
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.log("Could not get project name from REST API:", e);
+      }
+    }
+    
+    console.log("Final detected orgUrl:", orgUrl);
+    console.log("Final detected projectName:", projectName);
+    
+    return { orgUrl, projectName };
+  }
+
   async getWorkItem(workItemId: number): Promise<WorkItem> {
     try {
-      // Get organization URL and project from context
-      const host = SDK.getHost();
-      const orgUrl = (host as any).uri || (host as any).url || "";
-      const project = (host as any).name || "";
+      // Get org URL and project name (async method)
+      const { orgUrl, projectName } = await this.getOrgUrlAndProject();
+      
+      if (!orgUrl || !projectName) {
+        throw new Error(`Unable to get organization URL or project name. orgUrl: ${orgUrl || 'missing'}, projectName: ${projectName || 'missing'}. Please access the extension from within a project context.`);
+      }
+      
+      // Ensure orgUrl doesn't end with / and construct proper URL
+      const baseUrl = orgUrl.endsWith('/') ? orgUrl.slice(0, -1) : orgUrl;
 
       const accessToken = await SDK.getAccessToken();
       
-      // Use REST API directly
-      const response = await fetch(
-        `${orgUrl}${project}/_apis/wit/workitems/${workItemId}?$expand=all&api-version=7.1`,
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
+      if (!accessToken) {
+        throw new Error("Unable to get access token");
+      }
+      
+      // Use REST API directly - proper URL format
+      const apiUrl = `${baseUrl}/${encodeURIComponent(projectName)}/_apis/wit/workitems/${workItemId}?$expand=all&api-version=7.1`;
+      console.log("Fetching work item from:", apiUrl);
+      console.log("Using access token:", accessToken ? "Present" : "Missing");
+      
+      const response = await fetch(apiUrl, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+      });
 
       if (!response.ok) {
-        throw new Error(`Failed to fetch work item: ${response.statusText}`);
+        const errorText = await response.text();
+        console.error("API Error:", response.status, errorText);
+        console.error("Request URL was:", apiUrl);
+        throw new Error(`Failed to fetch work item: ${response.statusText} (${response.status})`);
       }
 
       const workItem = await response.json();
@@ -104,13 +294,18 @@ class AzureDevOpsService {
   }
 
   private async getRelatedWorkItem(workItemId: number): Promise<any> {
-    const host = SDK.getHost();
-    const orgUrl = (host as any).uri || (host as any).url || "";
-    const project = (host as any).name || "";
+    // Get org URL and project name (async method)
+    const { orgUrl, projectName } = await this.getOrgUrlAndProject();
+    
+    if (!orgUrl || !projectName) {
+      throw new Error("Unable to get organization URL or project name");
+    }
+    
+    const baseUrl = orgUrl.endsWith('/') ? orgUrl.slice(0, -1) : orgUrl;
     const accessToken = await SDK.getAccessToken();
 
     const response = await fetch(
-      `${orgUrl}${project}/_apis/wit/workitems/${workItemId}?$expand=all&api-version=7.1`,
+      `${baseUrl}/${encodeURIComponent(projectName)}/_apis/wit/workitems/${workItemId}?$expand=all&api-version=7.1`,
       {
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -228,9 +423,14 @@ class AzureDevOpsService {
     testPlanId: number,
     testSuiteId: number
   ): Promise<void> {
-    const host = SDK.getHost();
-    const orgUrl = (host as any).uri || (host as any).url || "";
-    const project = (host as any).name || "";
+    // Get org URL and project name (async method)
+    const { orgUrl, projectName } = await this.getOrgUrlAndProject();
+    
+    if (!orgUrl || !projectName) {
+      throw new Error("Unable to get organization URL or project name");
+    }
+    
+    const baseUrl = orgUrl.endsWith('/') ? orgUrl.slice(0, -1) : orgUrl;
     const accessToken = await SDK.getAccessToken();
 
     // First, create test case work items
@@ -264,7 +464,7 @@ class AzureDevOpsService {
 
       // Create test case work item
       const createResponse = await fetch(
-        `${orgUrl}${project}/_apis/wit/workitems/$Test Case?api-version=7.1`,
+        `${baseUrl}/${encodeURIComponent(projectName)}/_apis/wit/workitems/$Test Case?api-version=7.1`,
         {
           method: "PATCH",
           headers: {
@@ -285,7 +485,7 @@ class AzureDevOpsService {
 
     // Add test cases to test suite
     const addToSuiteResponse = await fetch(
-      `${orgUrl}${project}/_apis/testplan/Plans/${testPlanId}/Suites/${testSuiteId}/TestCases?api-version=7.1-preview.2`,
+      `${baseUrl}/${encodeURIComponent(projectName)}/_apis/testplan/Plans/${testPlanId}/Suites/${testSuiteId}/TestCases?api-version=7.1-preview.2`,
       {
         method: "POST",
         headers: {

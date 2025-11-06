@@ -1,0 +1,6 @@
+{
+  "apiBaseUrl": "",
+  "_comment": "Set your backend API URL here (e.g., https://your-api.azurewebsites.net). The backend must have GEMINI_API_KEY configured in its environment variables."
+}
+
+

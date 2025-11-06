@@ -39,4 +39,20 @@ gitlog.txt
 hosts_entry.txt
 
 # Test files
-test_gemini.py 
+test_gemini.py
+
+# VSIX files (extension packages)
+*.vsix
+
+# Azure deployment files
+.azure/
+deploy-to-azure.bat
+
+# Temporary files
+TestGeniusIcon.jpg
+task-pilot-extracted/
+startup.sh
+
+# Extension build artifacts (if not needed)
+extension/TestGeniusIcon.jpg
+extension/start-ngrok.bat 
