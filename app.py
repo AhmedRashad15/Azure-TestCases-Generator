@@ -24,10 +24,13 @@ load_dotenv()
 # --- Configure Gemini API ---
 # Create a .env file in your project root and add your Gemini API key:
 # GEMINI_API_KEY="YOUR_NEW_SECRET_API_KEY"
+# OR provide it via UI (optional)
 gemini_api_key = os.getenv("GEMINI_API_KEY")
-if not gemini_api_key:
-    raise ValueError("GEMINI_API_KEY not found in .env file")
-genai.configure(api_key=gemini_api_key)
+if gemini_api_key:
+    genai.configure(api_key=gemini_api_key)
+    print("DEBUG: Gemini API configured from .env file")
+else:
+    print("WARNING: GEMINI_API_KEY not found in .env file. Users can provide it via UI.")
 
 # --- Configure Claude API ---
 claude_api_key = os.getenv("CLAUDE_API_KEY")
@@ -103,16 +106,31 @@ def extract_images_from_html(html_content):
     
     return image_objects, text_content
 
-def call_ai_provider(ai_provider, prompt, images=None):
+def call_ai_provider(ai_provider, prompt, images=None, gemini_api_key=None, claude_api_key=None):
     """
     Call either Gemini or Claude API based on provider selection.
     Returns the text response from the AI.
+    
+    Args:
+        ai_provider: 'gemini' or 'claude'
+        prompt: The prompt text
+        images: Optional list of PIL Image objects
+        gemini_api_key: Optional Gemini API key (falls back to .env if not provided)
+        claude_api_key: Optional Claude API key (falls back to .env if not provided)
     """
     ai_provider = ai_provider.lower() if ai_provider else 'gemini'
     
     if ai_provider == 'claude':
-        if not claude_client:
-            raise ValueError("Claude API is not configured. Please set CLAUDE_API_KEY in environment variables.")
+        # Use provided key or fall back to environment variable
+        api_key = claude_api_key or os.getenv("CLAUDE_API_KEY")
+        if not api_key:
+            raise ValueError("Claude API key is required. Please provide CLAUDE_API_KEY in .env file or via UI.")
+        
+        # Create Claude client with the API key
+        try:
+            claude_client_instance = anthropic.Anthropic(api_key=api_key)
+        except Exception as e:
+            raise ValueError(f"Failed to initialize Claude API client: {e}")
         
         # Claude API message format - build content array with text and images
         content = []
@@ -201,7 +219,7 @@ def call_ai_provider(ai_provider, prompt, images=None):
                 else:
                     max_tokens = 4096  # Lower limit for non-test-case operations
                 print(f"DEBUG: Using max_tokens={max_tokens} for Claude API call")
-                response = claude_client.messages.create(
+                response = claude_client_instance.messages.create(
                     model=model_name,
                     max_tokens=max_tokens,
                     messages=messages
@@ -277,6 +295,13 @@ def call_ai_provider(ai_provider, prompt, images=None):
     
     else:  # Default to Gemini
         try:
+            # Use provided key or fall back to environment variable
+            api_key = gemini_api_key or os.getenv("GEMINI_API_KEY")
+            if not api_key:
+                raise ValueError("Gemini API key is required. Please provide GEMINI_API_KEY in .env file or via UI.")
+            
+            # Configure Gemini with the API key
+            genai.configure(api_key=api_key)
             model = genai.GenerativeModel('gemini-flash-latest')
             
             # Build content array with text and images
@@ -407,7 +432,7 @@ def fetch_story():
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
-def _generate_cases_for_type(ai_provider, story_title, story_description, acceptance_criteria, data_dictionary, case_type, related_stories=None, images=None, ambiguity_aware=True):
+def _generate_cases_for_type(ai_provider, story_title, story_description, acceptance_criteria, data_dictionary, case_type, related_stories=None, images=None, ambiguity_aware=True, gemini_api_key=None, claude_api_key=None):
     """Generate test cases for a specific type, optionally including images
     
     Args:
@@ -420,6 +445,8 @@ def _generate_cases_for_type(ai_provider, story_title, story_description, accept
         related_stories: List of related user stories
         images: List of PIL Image objects
         ambiguity_aware: If True, include ambiguity-aware test case generation (default: True)
+        gemini_api_key: Optional Gemini API key (falls back to .env if not provided)
+        claude_api_key: Optional Claude API key (falls back to .env if not provided)
     """
     ai_provider = ai_provider.lower() if ai_provider else 'gemini'
     print(f"DEBUG: _generate_cases_for_type called for {case_type} using {ai_provider}. related_stories:", related_stories)
@@ -606,7 +633,13 @@ Now, generate ONLY the `{case_type}` test cases based on all these instructions.
 """
     try:
         # Use the helper function to call the appropriate AI provider
-        response_text = call_ai_provider(ai_provider, prompt, images if images and len(images) > 0 else None)
+        response_text = call_ai_provider(
+            ai_provider, 
+            prompt, 
+            images if images and len(images) > 0 else None,
+            gemini_api_key=gemini_api_key,
+            claude_api_key=claude_api_key
+        )
         
         provider_name = "Gemini" if ai_provider != 'claude' else "Claude"
         print(f"DEBUG: Raw {provider_name} response for {case_type} (length: {len(response_text)}):\n{response_text[:500]}...\n--- End Response Preview ---\n")
@@ -726,10 +759,15 @@ def generate_test_cases_stream():
         ambiguity_aware = data.get('ambiguity_aware', True)  # Default to True for backward compatibility
         if isinstance(ambiguity_aware, str):
             ambiguity_aware = ambiguity_aware.lower() in ('true', '1', 'yes', 'on')
+        
+        # Extract optional API keys from request
+        gemini_api_key = data.get('gemini_api_key', '').strip() or None
+        claude_api_key = data.get('claude_api_key', '').strip() or None
 
         print("DEBUG: related_stories received in endpoint:", related_stories)
         print(f"DEBUG: AI Provider: {ai_provider}")
         print(f"DEBUG: Ambiguity-aware generation: {ambiguity_aware}")
+        print(f"DEBUG: API keys provided via UI - Gemini: {'Yes' if gemini_api_key else 'No'}, Claude: {'Yes' if claude_api_key else 'No'}")
 
         if not all([story_title, acceptance_criteria]):
             return Response("Story Title and Acceptance Criteria are required.", status=400)
@@ -752,7 +790,12 @@ def generate_test_cases_stream():
                     try:
                         print(f"DEBUG: Calling _generate_cases_for_type for {case_type} with related_stories:", related_stories)
                         # Generate cases for the current type, including images
-                        json_text_chunk = _generate_cases_for_type(ai_provider, story_title, desc_text, ac_text, dict_text, case_type, related_stories, all_images, ambiguity_aware)
+                        json_text_chunk = _generate_cases_for_type(
+                            ai_provider, story_title, desc_text, ac_text, dict_text, case_type, 
+                            related_stories, all_images, ambiguity_aware,
+                            gemini_api_key=gemini_api_key,
+                            claude_api_key=claude_api_key
+                        )
                         
                         # The API might return an empty or invalid string, so we validate it
                         try:
@@ -1069,10 +1112,15 @@ def analyze_story():
         related_test_cases = data.get('related_test_cases', '')
         ai_provider = data.get('ai_provider', 'gemini')  # Default to Gemini
         
+        # Extract optional API keys from request
+        gemini_api_key = data.get('gemini_api_key', '').strip() or None
+        claude_api_key = data.get('claude_api_key', '').strip() or None
+        
         print(f"DEBUG: Story title: {story_title}")
         print(f"DEBUG: Story description length: {len(story_description)}")
         print(f"DEBUG: Acceptance criteria length: {len(acceptance_criteria)}")
         print(f"DEBUG: AI Provider: {ai_provider}")
+        print(f"DEBUG: API keys provided via UI - Gemini: {'Yes' if gemini_api_key else 'No'}, Claude: {'Yes' if claude_api_key else 'No'}")
         
         if not story_title:
             print("ERROR: Story title is missing")
@@ -1265,7 +1313,13 @@ If images are included with the user story (either embedded in HTML or provided 
         
         # Use the helper function to call the appropriate AI provider
         try:
-            analysis_text = call_ai_provider(ai_provider, prompt, all_images if len(all_images) > 0 else None)
+            analysis_text = call_ai_provider(
+                ai_provider, 
+                prompt, 
+                all_images if len(all_images) > 0 else None,
+                gemini_api_key=gemini_api_key,
+                claude_api_key=claude_api_key
+            )
             
             if not analysis_text:
                 raise ValueError(f"Empty analysis response from {provider_name} API")

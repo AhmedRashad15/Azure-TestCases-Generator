@@ -400,6 +400,31 @@
                 </select>
             </div>
 
+            <div style="margin-top: 1em; margin-bottom: 1em; background-color: #f8f9fa; border-radius: var(--border-radius); border: 1px solid var(--border-color); overflow: hidden;">
+                <div id="api-keys-header-analysis" style="padding: 0.75em 1em; cursor: pointer; display: flex; align-items: center; justify-content: space-between; background-color: #e9ecef; user-select: none;" onclick="toggleApiKeysSection('analysis')">
+                    <h4 style="margin: 0; color: var(--primary-color); font-size: 0.95rem; display: flex; align-items: center; gap: 0.5em;">
+                        <span>🔑</span>
+                        <span>API Keys (Optional)</span>
+                    </h4>
+                    <span id="api-keys-toggle-analysis" style="color: var(--primary-color); font-size: 1.2rem; transition: transform 0.3s;">▼</span>
+                </div>
+                <div id="api-keys-content-analysis" style="display: none; padding: 1em;">
+                    <small style="display: block; margin-bottom: 1em; color: #666; font-size: 0.85rem;">
+                        If you don't have API keys in your .env file, you can provide them here. Leave empty to use .env file values.
+                    </small>
+                    <label for="gemini-api-key-ui">Gemini API Key (Optional):</label>
+                    <input type="password" id="gemini-api-key-ui" placeholder="Leave empty if set in .env file" style="margin-bottom: 0.5em;">
+                    <small style="display: block; margin-bottom: 1em; color: #666; font-size: 0.8rem;">
+                        Get your key from <a href="https://makersuite.google.com/app/apikey" target="_blank" style="color: var(--primary-color);">Google AI Studio</a>
+                    </small>
+                    <label for="claude-api-key-ui">Claude API Key (Optional):</label>
+                    <input type="password" id="claude-api-key-ui" placeholder="Leave empty if set in .env file">
+                    <small style="display: block; margin-top: 0.5em; color: #666; font-size: 0.8rem;">
+                        Get your key from <a href="https://console.anthropic.com/" target="_blank" style="color: var(--primary-color);">Anthropic Console</a>
+                    </small>
+                </div>
+            </div>
+
             <button id="analyze-story-btn">Analyze User Story</button>
             <div id="loading-analysis" class="hidden">
                 <div class="spinner"></div>
@@ -412,6 +437,31 @@
                     <option value="gemini">Google Gemini</option>
                     <option value="claude">Anthropic Claude</option>
                 </select>
+            </div>
+
+            <div style="margin-top: 1em; margin-bottom: 1em; background-color: #f8f9fa; border-radius: var(--border-radius); border: 1px solid var(--border-color); overflow: hidden;">
+                <div id="api-keys-header-generate" style="padding: 0.75em 1em; cursor: pointer; display: flex; align-items: center; justify-content: space-between; background-color: #e9ecef; user-select: none;" onclick="toggleApiKeysSection('generate')">
+                    <h4 style="margin: 0; color: var(--primary-color); font-size: 0.95rem; display: flex; align-items: center; gap: 0.5em;">
+                        <span>🔑</span>
+                        <span>API Keys (Optional)</span>
+                    </h4>
+                    <span id="api-keys-toggle-generate" style="color: var(--primary-color); font-size: 1.2rem; transition: transform 0.3s;">▼</span>
+                </div>
+                <div id="api-keys-content-generate" style="display: none; padding: 1em;">
+                    <small style="display: block; margin-bottom: 1em; color: #666; font-size: 0.85rem;">
+                        If you don't have API keys in your .env file, you can provide them here. Leave empty to use .env file values.
+                    </small>
+                    <label for="gemini-api-key-generate">Gemini API Key (Optional):</label>
+                    <input type="password" id="gemini-api-key-generate" placeholder="Leave empty if set in .env file" style="margin-bottom: 0.5em;">
+                    <small style="display: block; margin-bottom: 1em; color: #666; font-size: 0.8rem;">
+                        Get your key from <a href="https://makersuite.google.com/app/apikey" target="_blank" style="color: var(--primary-color);">Google AI Studio</a>
+                    </small>
+                    <label for="claude-api-key-generate">Claude API Key (Optional):</label>
+                    <input type="password" id="claude-api-key-generate" placeholder="Leave empty if set in .env file">
+                    <small style="display: block; margin-top: 0.5em; color: #666; font-size: 0.8rem;">
+                        Get your key from <a href="https://console.anthropic.com/" target="_blank" style="color: var(--primary-color);">Anthropic Console</a>
+                    </small>
+                </div>
             </div>
 
             <div style="margin-top: 1em; margin-bottom: 1em;">
@@ -882,6 +932,8 @@
             // Backend will handle image extraction and processing
             const aiProvider = document.getElementById('ai-provider-generate').value;
             const ambiguityAware = document.getElementById('ambiguity-aware-checkbox').checked;
+            const geminiKey = document.getElementById('gemini-api-key-generate').value.trim();
+            const claudeKey = document.getElementById('claude-api-key-generate').value.trim();
             const payload = {
                 story_title: document.getElementById('story-title').value,
                 story_description: getDescription(), // Send HTML directly
@@ -889,7 +941,9 @@
                 data_dictionary: getDataDictionary(), // Send HTML directly
                 related_stories: selectedRelated,
                 ai_provider: aiProvider,
-                ambiguity_aware: ambiguityAware
+                ambiguity_aware: ambiguityAware,
+                gemini_api_key: geminiKey || undefined,
+                claude_api_key: claudeKey || undefined
             };
 
             fetchStory.lastData = undefined;
@@ -1012,6 +1066,8 @@
 
             try {
                 const aiProvider = document.getElementById('ai-provider-analysis').value;
+                const geminiKey = document.getElementById('gemini-api-key-ui').value.trim();
+                const claudeKey = document.getElementById('claude-api-key-ui').value.trim();
                 const response = await fetch('/analyze_story', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -1020,7 +1076,9 @@
                         story_description: storyDescription,
                         acceptance_criteria: acceptanceCriteria,
                         related_test_cases: relatedTestCases,
-                        ai_provider: aiProvider
+                        ai_provider: aiProvider,
+                        gemini_api_key: geminiKey || undefined,
+                        claude_api_key: claudeKey || undefined
                     })
                 });
 
@@ -1214,6 +1272,22 @@
             }
         }
         
+        function toggleApiKeysSection(section) {
+            const content = document.getElementById(`api-keys-content-${section}`);
+            const toggle = document.getElementById(`api-keys-toggle-${section}`);
+            const isHidden = content.style.display === 'none';
+            
+            if (isHidden) {
+                content.style.display = 'block';
+                toggle.textContent = '▲';
+                toggle.style.transform = 'rotate(0deg)';
+            } else {
+                content.style.display = 'none';
+                toggle.textContent = '▼';
+                toggle.style.transform = 'rotate(0deg)';
+            }
+        }
+
         function updateTestCaseData(event) {
             const target = event.target;
             if (target.classList.contains('tc-input')) {
