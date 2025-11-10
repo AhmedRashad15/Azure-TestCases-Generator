@@ -13,6 +13,7 @@ venv/
 # Exclude all markdown documentation files
 *.md
 !README.md
+!SETUP_GUIDE.md
 
 # Node modules
 node_modules/
