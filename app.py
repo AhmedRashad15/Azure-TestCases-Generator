@@ -1197,11 +1197,6 @@ Keep this section clear and easy to read — one ambiguity and one question per 
 
 ---
 
-### 🟧 4. Recommendations
-Provide 2–4 short, actionable suggestions to make the story clearer, more complete, or easier to test.
-
----
-
 ### 🎨 UI Rendering Guidelines
 Return your final output formatted as **HTML** (not markdown), following these visual and structural rules:
 
@@ -1209,7 +1204,6 @@ Return your final output formatted as **HTML** (not markdown), following these v
   - **1. Summary:** Blue header (`#0078D7`)
   - **2. Key Functional Points:** Green header (`#28a745`)
   - **3. Ambiguities & Questions:** Yellow header (`#ffc107`)
-  - **4. Recommendations:** Orange header (`#fd7e14`)
 - Headers must have **bold white text**, padding (8px), and rounded corners.
 - Each bullet point should use:
   - **Bold labels** (like "Ambiguity:" / "Question:")
@@ -1246,11 +1240,6 @@ Here is the preferred HTML structure template (use this for formatting your resp
         <b>Question:</b> How long should the reset link remain valid?</li>
     <li><b>Ambiguity:</b> Image shows a "Cancel" button that is not mentioned in acceptance criteria.<br>
         <b>Question:</b> Should users be able to cancel the password reset process?</li>
-  </ul>
-
-  <h2 class="header orange">4. Recommendations</h2>
-  <ul>
-    <li>Add acceptance criteria for email content and expiration time.</li>
   </ul>
 </div>
 ```
