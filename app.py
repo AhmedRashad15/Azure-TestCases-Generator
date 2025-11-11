@@ -467,14 +467,21 @@ def _generate_cases_for_type(ai_provider, story_title, story_description, accept
 - **Title Examples:** "[Positive] User successfully creates account with valid information", "[Positive] System saves data when all required fields are completed", "[Positive] Pagination controls work correctly when navigating to page 2", "[Positive] System accepts minimum value (0) for quantity field".""",
         "Negative": """
 **Negative Test Case Guidelines:**
+- **CRITICAL: You MUST ALWAYS generate negative test cases, even for simple stories. Every user story has potential failure scenarios that need to be tested.**
 - Test scenarios where inputs are invalid, missing, or unexpected.
 - Create separate test cases for key types of invalid input - prioritize critical validation rules and common error scenarios.
 - Generate test cases for important invalid scenarios (missing required fields, wrong format, wrong type, out of range) - focus on high-impact validation failures.
 - Verify that appropriate error messages are displayed when failures occur - create test cases for critical error scenarios with expected error message in expectedResult.
 - Cover key validation rules with negative test cases - prioritize the most important validations rather than exhaustive coverage.
+- **If no explicit validation rules are mentioned in the story, generate negative test cases for common scenarios:**
+  * Missing required fields/inputs
+  * Invalid data formats (if applicable)
+  * Empty/null values where data is expected
+  * Invalid user actions or workflows
+  * System errors or failure conditions
 - **Boundary Value Violations (for numeric fields):** Generate negative test cases for critical invalid boundary values (below minimum, above maximum, negative if rejected) with expected error messages - prioritize important fields.
 - **Pagination Errors (for lists):** Generate negative test cases for key pagination failures (invalid page number, navigation beyond last page) with expected error messages - focus on common error scenarios.
-- **Generate 3-12 negative test cases** for most stories, focusing on critical validation rules and common error scenarios.
+- **Generate 3-12 negative test cases** for most stories, focusing on critical validation rules and common error scenarios. **Minimum: Generate at least 3 negative test cases even for simple stories.**
 - **Title Examples:** "[Negative] System shows error when email field is empty", "[Negative] Application prevents login with invalid password format", "[Negative] System rejects value below minimum (-1) for age field", "[Negative] System handles invalid page number correctly".""",
         "Edge Case": """
 **Edge Case & Boundary Guidelines:**
@@ -628,6 +635,7 @@ Now, generate ONLY the `{case_type}` test cases based on all these instructions.
 - The goal is balanced, meaningful test coverage - avoid both minimal sets and excessive over-generation
 - Do not generate duplicate test cases. Each test case must be unique in its condition, steps, and expected result.
 - If the story is simple, generate fewer test cases. If complex, generate more, but always stay within reasonable bounds (typically 5-15 test cases per type for most stories).
+- **FOR NEGATIVE TEST CASES SPECIFICALLY: You MUST generate at least 3 negative test cases. If you cannot identify explicit validation rules, generate negative test cases for common failure scenarios such as: missing required inputs, invalid data formats, empty/null values, invalid user actions, or system error conditions. Never return an empty array for negative test cases.**
 
 **CRITICAL: You MUST return ONLY a valid JSON array. Do not include any explanatory text, markdown formatting, or code blocks. Return ONLY the JSON array starting with [ and ending with ].**
 """
@@ -684,6 +692,68 @@ Now, generate ONLY the `{case_type}` test cases based on all these instructions.
             if len(test_parse) == 0:
                 print(f"WARNING: {provider_name} returned empty array for {case_type}")
                 print(f"DEBUG: Full response was: {clean_json_text[:1000]}")
+                # For negative test cases, try to generate fallback cases if empty
+                if case_type == "Negative":
+                    print(f"WARNING: Empty negative test cases detected. Attempting fallback generation...")
+                    # Create a more explicit prompt for negative cases
+                    fallback_prompt = f"""
+You are generating negative test cases for a user story. The previous attempt returned an empty array, which is not acceptable.
+
+**User Story:**
+- Title: {story_title}
+- Description: {story_description}
+- Acceptance Criteria: {acceptance_criteria}
+
+**CRITICAL REQUIREMENT:** You MUST generate at least 3-5 negative test cases. Even if no explicit validation rules are mentioned, generate negative test cases for:
+1. Missing required fields/inputs
+2. Invalid data formats
+3. Empty/null values
+4. Invalid user actions
+5. System error conditions
+
+Return ONLY a JSON array with at least 3 negative test cases following this format:
+[
+  {{
+    "id": "TC-NEG-1",
+    "title": "[Negative] ...",
+    "priority": "High",
+    "description": "1. Step one\\n2. Step two",
+    "expectedResult": "Expected error/behavior"
+  }}
+]
+
+Return ONLY the JSON array, no other text.
+"""
+                    try:
+                        fallback_response = call_ai_provider(
+                            ai_provider,
+                            fallback_prompt,
+                            images if images and len(images) > 0 else None,
+                            gemini_api_key=gemini_api_key,
+                            claude_api_key=claude_api_key
+                        )
+                        # Clean and parse fallback response
+                        fallback_clean = fallback_response.strip()
+                        if fallback_clean.startswith('```'):
+                            lines = fallback_clean.split('\n')
+                            if lines[0].startswith('```'):
+                                lines = lines[1:]
+                            if lines and lines[-1].strip() == '```':
+                                lines = lines[:-1]
+                            fallback_clean = '\n'.join(lines).strip()
+                        
+                        json_match = re.search(r'\[.*\]', fallback_clean, re.DOTALL)
+                        if json_match:
+                            fallback_clean = json_match.group(0)
+                        
+                        fallback_parse = json.loads(fallback_clean)
+                        if isinstance(fallback_parse, list) and len(fallback_parse) > 0:
+                            print(f"SUCCESS: Fallback generated {len(fallback_parse)} negative test cases")
+                            return json.dumps(fallback_parse)
+                        else:
+                            print(f"WARNING: Fallback also returned empty array")
+                    except Exception as fallback_err:
+                        print(f"ERROR: Fallback generation failed: {fallback_err}")
             else:
                 print(f"DEBUG: Successfully parsed {len(test_parse)} test cases from {provider_name} for {case_type}")
         except json.JSONDecodeError as json_err:

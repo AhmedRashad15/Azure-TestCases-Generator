@@ -284,8 +284,8 @@ function createTestCaseAccordion(tc) {
         <div class="readonly-content">
             <label>Description / Steps:</label>
             ${formatSteps(tc.description)}
-            <label style="margin-top: 1em;">Expected Result:</label>
-            <p>${tc.expectedResult || 'N/A'}</p>
+            <label style="margin-top: 1em;">✅ Expected Result:</label>
+            <p>✅ ${tc.expectedResult || 'N/A'}</p>
         </div>
     `;
     

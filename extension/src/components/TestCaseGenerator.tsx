@@ -182,7 +182,7 @@ const TestCaseGenerator: React.FC<TestCaseGeneratorProps> = ({
                   <strong>Description:</strong> {tc.description}
                 </p>
                 <p>
-                  <strong>Expected Result:</strong> {tc.expectedResult}
+                  <strong>✅ Expected Result:</strong> ✅ {tc.expectedResult}
                 </p>
               </div>
             </div>
