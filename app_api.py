@@ -106,8 +106,9 @@ def extract_images_from_html(html_content):
             alt_text = img.get('alt', 'image')
             img.replace_with(f"[Image: {alt_text} - external URL]")
     
-    # Get text content with placeholders
-    text_content = soup.get_text(separator=' ', strip=True)
+    # Get text content with placeholders - preserve newlines for step detection
+    # Use separator='\n' to preserve line breaks which are important for step detection
+    text_content = soup.get_text(separator='\n', strip=True)
     
     return image_objects, text_content
 
@@ -600,12 +601,16 @@ def _detect_steps_in_acceptance_criteria(acceptance_criteria):
     if not acceptance_criteria:
         return False, ""
     
+    # Check if user mentions "steps" anywhere in the text (context-aware detection)
+    text_lower = acceptance_criteria.lower()
+    mentions_steps = bool(re.search(r'\b(step|steps)\b', text_lower))
+    
     # Check for numbered steps (1., 2., 3., etc. or 1), 2), 3), etc. or 1-, 2-, 3-, etc.)
     numbered_pattern = r'^\s*\d+[\.\)\-]\s*.+'
     # Check for bullet points (-, *, •)
     bullet_pattern = r'^\s*[-*•]\s+.+'
-    # Check for step indicators (also consider these steps, steps:, consider the following steps, etc.)
-    step_indicator_pattern = r'(?i)(also\s+consider\s+(these\s+)?steps?|consider\s+the\s+following\s+steps?|steps?:|initial\s+steps?|provided\s+steps?)'
+    # Check for step indicators (also consider these steps, consider the following steps, steps:, etc.)
+    step_indicator_pattern = r'(?i)(also\s+consider\s+(these\s+)?steps?|consider\s+the\s+following\s+steps?|steps?:|initial\s+steps?|provided\s+steps?|following\s+steps?)'
     
     lines = acceptance_criteria.split('\n')
     steps_found = []
@@ -627,7 +632,7 @@ def _detect_steps_in_acceptance_criteria(acceptance_criteria):
             in_steps_section = True
             continue  # Skip the indicator line itself
         
-        # Check if line matches step patterns (including 1-, 2-, format)
+        # Check if line matches step patterns (including 1- format)
         if re.match(numbered_pattern, line_stripped) or re.match(bullet_pattern, line_stripped):
             in_steps_section = True
             steps_found.append(line_stripped)
@@ -639,7 +644,7 @@ def _detect_steps_in_acceptance_criteria(acceptance_criteria):
             # But only if we've already collected at least one step
             if len(steps_found) > 0:
                 # Check if this looks like it could be a continuation (starts with common step words)
-                if re.match(r'^\s*(navigate|click|select|enter|verify|check|open|close|submit|save|login|logout)', line_stripped, re.IGNORECASE):
+                if re.match(r'^\s*(navigate|click|select|enter|verify|check|open|close|submit|save|login|logout|access)', line_stripped, re.IGNORECASE):
                     steps_found.append(line_stripped)
                     continue
             # End of steps section
@@ -649,12 +654,16 @@ def _detect_steps_in_acceptance_criteria(acceptance_criteria):
             break
     
     # Also check for steps that might be anywhere in the text (not just sequential)
-    if len(steps_found) == 0:
+    # Especially if user mentioned "steps" in context
+    if len(steps_found) == 0 or (mentions_steps and len(steps_found) < 2):
         # Try to find any numbered steps anywhere in the text
         for line in lines:
             line_stripped = line.strip()
-            if re.match(numbered_pattern, line_stripped):
-                steps_found.append(line_stripped)
+            # Match numbered patterns including 1- format
+            if re.match(r'^\s*\d+[\.\)\-]\s*.+', line_stripped):
+                # Avoid duplicates
+                if line_stripped not in steps_found:
+                    steps_found.append(line_stripped)
     
     # Normalize step format: convert "1-" to "1." for consistency
     normalized_steps = []
@@ -695,9 +704,13 @@ def _generate_cases_for_type(ai_provider, story_title, story_description, accept
     has_steps, steps_text = _detect_steps_in_acceptance_criteria(acceptance_criteria)
     steps_text_escaped = ""
     if has_steps:
-        print(f"DEBUG: Detected steps in acceptance criteria. Steps found: {len(steps_text.split(chr(10)))}")
+        step_count = len(steps_text.split('\n'))
+        print(f"DEBUG: Detected steps in acceptance criteria. Steps found: {step_count}")
+        print(f"DEBUG: Steps content (first 500 chars): {steps_text[:500]}")
         # Escape the steps text for use in f-string
         steps_text_escaped = steps_text.replace('{', '{{').replace('}', '}}')
+    else:
+        print(f"DEBUG: No steps detected in acceptance criteria. Content preview: {acceptance_criteria[:200] if acceptance_criteria else 'None'}")
     
     guideline_map = {
         "Positive": """
@@ -812,6 +825,8 @@ The acceptance criteria contains explicit steps provided by the user. These step
 {steps_text_escaped}
 
 **CRITICAL REQUIREMENT:** Every test case description MUST begin with these exact steps in this exact order. Then, add additional steps to complete the test scenario. Never omit, skip, or replace the provided steps - they are mandatory initial steps that must appear in every test case.
+
+**VALIDATION CHECK:** Before returning your JSON response, verify that each test case's `description` field starts with the provided steps. If any test case description does not begin with the provided steps, you must fix it. The provided steps are non-negotiable and must be the foundation of every test case description.
 """
 
     prompt = f"""
@@ -858,7 +873,7 @@ Each test case in the JSON array must have the following fields:
   * Use action-oriented language that describes the expected behavior
   * Examples: "[Positive] User can successfully login with valid credentials", "[Negative] System displays error when required field is empty", "[Edge Case] Application handles maximum character limit in text field"
 - `priority`: "High", "Medium", or "Low".
-- `description`: A numbered list of steps, e.g., "1. Step one.\\n2. Step two.".
+- `description`: A numbered list of steps, e.g., "1. Step one.\\n2. Step two.". **CRITICAL: If steps were provided in acceptance criteria, you MUST start the description with those exact steps first, then add additional steps to complete the test scenario.**
 - `expectedResult`: A specific and verifiable outcome.
 
 **ID Naming Convention:**
