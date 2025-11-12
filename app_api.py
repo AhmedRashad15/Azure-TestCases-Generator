@@ -604,15 +604,28 @@ def _detect_steps_in_acceptance_criteria(acceptance_criteria):
     numbered_pattern = r'^\s*\d+[\.\)]\s+.+'
     # Check for bullet points (-, *, •)
     bullet_pattern = r'^\s*[-*•]\s+.+'
+    # Check for step indicators (also consider these steps, steps:, etc.)
+    step_indicator_pattern = r'(?i)(also\s+consider\s+(these\s+)?steps?|steps?:|initial\s+steps?|provided\s+steps?)'
     
     lines = acceptance_criteria.split('\n')
     steps_found = []
     in_steps_section = False
+    found_step_indicator = False
     
-    for line in lines:
+    for i, line in enumerate(lines):
         line_stripped = line.strip()
         if not line_stripped:
-            continue
+            # Allow blank lines within steps section
+            if in_steps_section:
+                continue
+            else:
+                continue
+        
+        # Check for step indicators
+        if re.search(step_indicator_pattern, line_stripped):
+            found_step_indicator = True
+            in_steps_section = True
+            continue  # Skip the indicator line itself
         
         # Check if line matches step patterns
         if re.match(numbered_pattern, line_stripped) or re.match(bullet_pattern, line_stripped):
@@ -621,11 +634,29 @@ def _detect_steps_in_acceptance_criteria(acceptance_criteria):
         elif in_steps_section and (line_stripped.startswith('-') or line_stripped.startswith('*') or line_stripped.startswith('•') or re.match(r'^\d+[\.\)]', line_stripped)):
             # Continue collecting steps
             steps_found.append(line_stripped)
-        elif in_steps_section:
+        elif found_step_indicator and in_steps_section:
+            # If we found an indicator, continue collecting until we hit a non-step line
+            # But only if we've already collected at least one step
+            if len(steps_found) > 0:
+                # Check if this looks like it could be a continuation (starts with common step words)
+                if re.match(r'^\s*(navigate|click|select|enter|verify|check|open|close|submit|save|login|logout)', line_stripped, re.IGNORECASE):
+                    steps_found.append(line_stripped)
+                    continue
             # End of steps section
             break
+        elif in_steps_section and not found_step_indicator:
+            # End of steps section (only if no indicator was found)
+            break
     
-    if len(steps_found) >= 2:  # At least 2 steps to be considered a step list
+    # Also check for steps that might be anywhere in the text (not just sequential)
+    if len(steps_found) == 0:
+        # Try to find any numbered steps anywhere in the text
+        for line in lines:
+            line_stripped = line.strip()
+            if re.match(numbered_pattern, line_stripped):
+                steps_found.append(line_stripped)
+    
+    if len(steps_found) >= 1:  # At least 1 step to be considered a step list
         steps_text = '\n'.join(steps_found)
         return True, steps_text
     
@@ -749,23 +780,29 @@ When generating test cases, pay special attention to any ambiguities, contradict
     steps_section = ""
     if has_steps:
         steps_section = f"""
-**STEPS DETECTED IN ACCEPTANCE CRITERIA:**
-The acceptance criteria contains explicit steps that should be incorporated into test case descriptions. When generating test cases, you MUST:
+**CRITICAL: STEPS DETECTED IN ACCEPTANCE CRITERIA - MUST BE INCLUDED:**
+The acceptance criteria contains explicit steps provided by the user. These steps MUST ALWAYS be included in every test case description. Follow these requirements:
 
-1. **Use the steps as a foundation:** The steps defined in the acceptance criteria should form the basis of the test case description. Adapt these steps to match the test case type ({case_type}):
-   - For **Positive** test cases: Use the steps as-is, showing the successful execution path
-   - For **Negative** test cases: Modify steps to show where validation fails or errors occur
-   - For **Edge Case** test cases: Adapt steps to show boundary conditions or unusual scenarios
-   - For **Data Flow** test cases: Use steps to trace data through the system
+1. **ALWAYS START WITH PROVIDED STEPS:** The steps from the acceptance criteria MUST be used as the INITIAL steps in every test case description. Do NOT skip, ignore, or replace these steps.
 
-2. **Incorporate steps into description field:** Each test case's `description` field should include the relevant steps from the acceptance criteria, adapted as needed for the test case type. Format them as numbered steps (e.g., "1. Step one\\n2. Step two").
+2. **Preserve Step Order and Content:** 
+   - Use the provided steps EXACTLY as they appear, maintaining their original order
+   - Keep the same numbering format (1., 2., 3., etc.)
+   - Preserve the exact wording and details from the provided steps
+   - These are the user's required initial steps and must appear first
 
-3. **Maintain step sequence:** When applicable, maintain the logical sequence of steps from the acceptance criteria, but feel free to add additional verification steps or modify steps to fit the test scenario.
+3. **Complete the Workflow:** After including ALL the provided steps, ADD additional steps to complete the test case workflow based on the test case type ({case_type}):
+   - For **Positive** test cases: Add steps showing successful completion after the provided steps
+   - For **Negative** test cases: Add steps showing where validation fails or errors occur (after the provided steps)
+   - For **Edge Case** test cases: Add steps showing boundary conditions or unusual scenarios (after the provided steps)
+   - For **Data Flow** test cases: Add steps tracing data through the system (after the provided steps)
 
-4. **Steps from Acceptance Criteria:**
+4. **Step Formatting:** Format all steps as numbered steps (e.g., "1. Step one\\n2. Step two\\n3. Step three"). The provided steps should be numbered starting from 1, and your additional steps should continue the numbering sequence.
+
+5. **Steps from Acceptance Criteria (MUST BE INCLUDED AS INITIAL STEPS):**
 {steps_text_escaped}
 
-**IMPORTANT:** When generating test cases, ensure that the steps from the acceptance criteria are reflected in the test case descriptions. Do not ignore or skip these steps - they represent the defined workflow that must be tested.
+**CRITICAL REQUIREMENT:** Every test case description MUST begin with these exact steps in this exact order. Then, add additional steps to complete the test scenario. Never omit, skip, or replace the provided steps - they are mandatory initial steps that must appear in every test case.
 """
 
     prompt = f"""
