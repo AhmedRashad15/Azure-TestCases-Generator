@@ -600,12 +600,12 @@ def _detect_steps_in_acceptance_criteria(acceptance_criteria):
     if not acceptance_criteria:
         return False, ""
     
-    # Check for numbered steps (1., 2., 3., etc. or 1), 2), 3), etc.)
-    numbered_pattern = r'^\s*\d+[\.\)]\s+.+'
+    # Check for numbered steps (1., 2., 3., etc. or 1), 2), 3), etc. or 1-, 2-, 3-, etc.)
+    numbered_pattern = r'^\s*\d+[\.\)\-]\s*.+'
     # Check for bullet points (-, *, •)
     bullet_pattern = r'^\s*[-*•]\s+.+'
-    # Check for step indicators (also consider these steps, steps:, etc.)
-    step_indicator_pattern = r'(?i)(also\s+consider\s+(these\s+)?steps?|steps?:|initial\s+steps?|provided\s+steps?)'
+    # Check for step indicators (also consider these steps, steps:, consider the following steps, etc.)
+    step_indicator_pattern = r'(?i)(also\s+consider\s+(these\s+)?steps?|consider\s+the\s+following\s+steps?|steps?:|initial\s+steps?|provided\s+steps?)'
     
     lines = acceptance_criteria.split('\n')
     steps_found = []
@@ -627,11 +627,11 @@ def _detect_steps_in_acceptance_criteria(acceptance_criteria):
             in_steps_section = True
             continue  # Skip the indicator line itself
         
-        # Check if line matches step patterns
+        # Check if line matches step patterns (including 1-, 2-, format)
         if re.match(numbered_pattern, line_stripped) or re.match(bullet_pattern, line_stripped):
             in_steps_section = True
             steps_found.append(line_stripped)
-        elif in_steps_section and (line_stripped.startswith('-') or line_stripped.startswith('*') or line_stripped.startswith('•') or re.match(r'^\d+[\.\)]', line_stripped)):
+        elif in_steps_section and (line_stripped.startswith('-') or line_stripped.startswith('*') or line_stripped.startswith('•') or re.match(r'^\d+[\.\)\-]', line_stripped)):
             # Continue collecting steps
             steps_found.append(line_stripped)
         elif found_step_indicator and in_steps_section:
@@ -656,10 +656,19 @@ def _detect_steps_in_acceptance_criteria(acceptance_criteria):
             if re.match(numbered_pattern, line_stripped):
                 steps_found.append(line_stripped)
     
-    if len(steps_found) >= 1:  # At least 1 step to be considered a step list
-        steps_text = '\n'.join(steps_found)
+    # Normalize step format: convert "1-" to "1." for consistency
+    normalized_steps = []
+    for step in steps_found:
+        # Convert "1-" format to "1." format for better AI understanding
+        normalized_step = re.sub(r'^(\s*\d+)\-(\s*)', r'\1.\2', step)
+        normalized_steps.append(normalized_step)
+    
+    if len(normalized_steps) >= 1:  # At least 1 step to be considered a step list
+        steps_text = '\n'.join(normalized_steps)
+        print(f"DEBUG: _detect_steps_in_acceptance_criteria: Found {len(normalized_steps)} steps")
         return True, steps_text
     
+    print(f"DEBUG: _detect_steps_in_acceptance_criteria: No steps found")
     return False, ""
 
 def _generate_cases_for_type(ai_provider, story_title, story_description, acceptance_criteria, data_dictionary, case_type, related_stories=None, images=None, ambiguity_aware=True):
@@ -1031,6 +1040,15 @@ def generate_test_cases_stream():
         desc_images, desc_text = extract_images_from_html(story_description)
         ac_images, ac_text = extract_images_from_html(acceptance_criteria)
         dict_images, dict_text = extract_images_from_html(data_dictionary)
+        
+        # Debug: Check if steps are detected in acceptance criteria (after HTML extraction)
+        has_steps_debug, steps_text_debug = _detect_steps_in_acceptance_criteria(ac_text)
+        print(f"DEBUG: Acceptance criteria text length: {len(ac_text) if ac_text else 0}")
+        print(f"DEBUG: Steps detected in acceptance criteria: {has_steps_debug}")
+        if has_steps_debug:
+            print(f"DEBUG: Detected steps preview: {steps_text_debug[:300]}")
+        else:
+            print(f"DEBUG: No steps detected. AC preview: {ac_text[:300] if ac_text else 'None'}")
         
         # Collect all images
         all_images = desc_images + ac_images + dict_images
