@@ -591,6 +591,46 @@ Here is the preferred HTML structure template (use this for formatting your resp
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
+def _detect_steps_in_acceptance_criteria(acceptance_criteria):
+    """Detect if acceptance criteria contains numbered steps or bullet points
+    
+    Returns:
+        tuple: (has_steps: bool, steps_section: str)
+    """
+    if not acceptance_criteria:
+        return False, ""
+    
+    # Check for numbered steps (1., 2., 3., etc. or 1), 2), 3), etc.)
+    numbered_pattern = r'^\s*\d+[\.\)]\s+.+'
+    # Check for bullet points (-, *, •)
+    bullet_pattern = r'^\s*[-*•]\s+.+'
+    
+    lines = acceptance_criteria.split('\n')
+    steps_found = []
+    in_steps_section = False
+    
+    for line in lines:
+        line_stripped = line.strip()
+        if not line_stripped:
+            continue
+        
+        # Check if line matches step patterns
+        if re.match(numbered_pattern, line_stripped) or re.match(bullet_pattern, line_stripped):
+            in_steps_section = True
+            steps_found.append(line_stripped)
+        elif in_steps_section and (line_stripped.startswith('-') or line_stripped.startswith('*') or line_stripped.startswith('•') or re.match(r'^\d+[\.\)]', line_stripped)):
+            # Continue collecting steps
+            steps_found.append(line_stripped)
+        elif in_steps_section:
+            # End of steps section
+            break
+    
+    if len(steps_found) >= 2:  # At least 2 steps to be considered a step list
+        steps_text = '\n'.join(steps_found)
+        return True, steps_text
+    
+    return False, ""
+
 def _generate_cases_for_type(ai_provider, story_title, story_description, acceptance_criteria, data_dictionary, case_type, related_stories=None, images=None, ambiguity_aware=True):
     """Generate test cases for a specific type, optionally including images
     
@@ -610,6 +650,15 @@ def _generate_cases_for_type(ai_provider, story_title, story_description, accept
     print(f"DEBUG: Ambiguity-aware generation: {ambiguity_aware}")
     if images:
         print(f"DEBUG: Including {len(images)} images in test case generation")
+    
+    # Detect steps in acceptance criteria
+    has_steps, steps_text = _detect_steps_in_acceptance_criteria(acceptance_criteria)
+    steps_text_escaped = ""
+    if has_steps:
+        print(f"DEBUG: Detected steps in acceptance criteria. Steps found: {len(steps_text.split(chr(10)))}")
+        # Escape the steps text for use in f-string
+        steps_text_escaped = steps_text.replace('{', '{{').replace('}', '}}')
+    
     guideline_map = {
         "Positive": """
 **Positive Test Case Guidelines:**
@@ -696,6 +745,29 @@ When generating test cases, pay special attention to any ambiguities, contradict
    - Prioritize scenarios that could lead to unauthorized access
 """
     
+    # Build steps section if steps are detected in acceptance criteria
+    steps_section = ""
+    if has_steps:
+        steps_section = f"""
+**STEPS DETECTED IN ACCEPTANCE CRITERIA:**
+The acceptance criteria contains explicit steps that should be incorporated into test case descriptions. When generating test cases, you MUST:
+
+1. **Use the steps as a foundation:** The steps defined in the acceptance criteria should form the basis of the test case description. Adapt these steps to match the test case type ({case_type}):
+   - For **Positive** test cases: Use the steps as-is, showing the successful execution path
+   - For **Negative** test cases: Modify steps to show where validation fails or errors occur
+   - For **Edge Case** test cases: Adapt steps to show boundary conditions or unusual scenarios
+   - For **Data Flow** test cases: Use steps to trace data through the system
+
+2. **Incorporate steps into description field:** Each test case's `description` field should include the relevant steps from the acceptance criteria, adapted as needed for the test case type. Format them as numbered steps (e.g., "1. Step one\\n2. Step two").
+
+3. **Maintain step sequence:** When applicable, maintain the logical sequence of steps from the acceptance criteria, but feel free to add additional verification steps or modify steps to fit the test scenario.
+
+4. **Steps from Acceptance Criteria:**
+{steps_text_escaped}
+
+**IMPORTANT:** When generating test cases, ensure that the steps from the acceptance criteria are reflected in the test case descriptions. Do not ignore or skip these steps - they represent the defined workflow that must be tested.
+"""
+
     prompt = f"""
 You are an expert test case generator for Azure DevOps with a focus on comprehensive test coverage. Your task is to generate a JSON array of ONLY the **{case_type}** test cases for the user story below.
 
@@ -708,6 +780,7 @@ You are an expert test case generator for Azure DevOps with a focus on comprehen
 
 **IMAGES PROVIDED:**
 If images are included with the user story, please analyze them carefully and reference their content when generating test cases. The images may show UI mockups, workflows, or visual requirements that should be covered in the test cases.
+{steps_section}
 {ambiguity_section}
 **Universal Guidelines:**
 1. **Descriptive Titles:** Create specific, action-oriented titles that clearly describe what functionality is being tested. Avoid generic titles like "Test login" - instead use "User can successfully login with valid email and password".
