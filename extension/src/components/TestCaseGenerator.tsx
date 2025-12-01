@@ -22,7 +22,6 @@ const TestCaseGenerator: React.FC<TestCaseGeneratorProps> = ({
   const [uploading, setUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<string>("");
   const [aiProvider, setAiProvider] = useState<string>("gemini");
-  const [ambiguityAware, setAmbiguityAware] = useState<boolean>(true);
 
   const handleGenerate = async () => {
     setLoading(true);
@@ -50,8 +49,7 @@ const TestCaseGenerator: React.FC<TestCaseGeneratorProps> = ({
             setProgress(progressData.message);
           }
         },
-        aiProvider,
-        ambiguityAware
+        aiProvider
       );
 
       setProgress("All test cases generated successfully!");
@@ -113,21 +111,6 @@ const TestCaseGenerator: React.FC<TestCaseGeneratorProps> = ({
           <option value="gemini">Google Gemini</option>
           <option value="claude">Anthropic Claude</option>
         </select>
-      </div>
-      <div style={{ marginBottom: "10px" }}>
-        <label style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <input
-            type="checkbox"
-            checked={ambiguityAware}
-            onChange={(e) => setAmbiguityAware(e.target.checked)}
-            disabled={loading}
-            style={{ width: "18px", height: "18px", cursor: "pointer" }}
-          />
-          <span>Enable ambiguity-aware test case generation</span>
-        </label>
-        <small style={{ display: "block", marginTop: "4px", color: "#666", fontSize: "12px" }}>
-          When enabled, generates test cases that address ambiguities and contradictions in requirements (max 2-3 per ambiguity)
-        </small>
       </div>
       <div>
         <label htmlFor="data-dictionary">Data Dictionary (Optional):</label>

@@ -464,16 +464,6 @@
                 </div>
             </div>
 
-            <div style="margin-top: 1em; margin-bottom: 1em;">
-                <label style="display: flex; align-items: center; gap: 8px; font-weight: 500; cursor: pointer;">
-                    <input type="checkbox" id="ambiguity-aware-checkbox" checked style="width: 18px; height: 18px; cursor: pointer;">
-                    <span>Enable ambiguity-aware test case generation</span>
-                </label>
-                <small style="display: block; margin-top: 4px; color: #666; font-size: 0.85rem; margin-left: 26px;">
-                    When enabled, generates test cases that address ambiguities and contradictions in requirements (max 2-3 per ambiguity)
-                </small>
-            </div>
-
             <button id="generate-cases-btn">Generate Test Cases</button>
             <div id="loading-generator" class="hidden">
                 <div class="spinner"></div>
@@ -931,7 +921,6 @@
             // Send HTML content directly so backend can extract images
             // Backend will handle image extraction and processing
             const aiProvider = document.getElementById('ai-provider-generate').value;
-            const ambiguityAware = document.getElementById('ambiguity-aware-checkbox').checked;
             const geminiKey = document.getElementById('gemini-api-key-generate').value.trim();
             const claudeKey = document.getElementById('claude-api-key-generate').value.trim();
             const payload = {
@@ -941,7 +930,6 @@
                 data_dictionary: getDataDictionary(), // Send HTML directly
                 related_stories: selectedRelated,
                 ai_provider: aiProvider,
-                ambiguity_aware: ambiguityAware,
                 gemini_api_key: geminiKey || undefined,
                 claude_api_key: claudeKey || undefined
             };
