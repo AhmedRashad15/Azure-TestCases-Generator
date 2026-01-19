@@ -263,13 +263,27 @@ class AzureDevOpsService {
               try {
                 const relatedItem = await this.getRelatedWorkItem(parseInt(relatedId));
                 if (relatedItem && relatedItem.fields["System.WorkItemType"] === "User Story") {
+                  // Get HTML content for related story (preserve tables and structure)
+                  const relatedDescHtml = relatedItem.fields["System.Description"] || "";
+                  const relatedAcHtml = relatedItem.fields["Microsoft.VSTS.Common.AcceptanceCriteria"] || "";
+                  
+                  // Convert Azure DevOps image URLs to base64 data URLs (like main story)
+                  const relatedDescription = await this.convertAzureDevOpsImagesToDataUrls(
+                    relatedDescHtml,
+                    orgUrl,
+                    accessToken
+                  );
+                  const relatedAcceptanceCriteria = await this.convertAzureDevOpsImagesToDataUrls(
+                    relatedAcHtml,
+                    orgUrl,
+                    accessToken
+                  );
+                  
                   related_stories.push({
                     id: relatedId,
                     title: relatedItem.fields["System.Title"] || "",
-                    description: this.htmlToText(relatedItem.fields["System.Description"] || ""),
-                    acceptance_criteria: this.htmlToText(
-                      relatedItem.fields["Microsoft.VSTS.Common.AcceptanceCriteria"] || ""
-                    ),
+                    description: relatedDescription, // Keep as HTML to preserve tables
+                    acceptance_criteria: relatedAcceptanceCriteria, // Keep as HTML to preserve tables
                   });
                 }
               } catch (error) {

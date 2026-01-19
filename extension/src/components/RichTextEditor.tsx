@@ -246,40 +246,323 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
     }
   };
 
+  const formatText = (command: string, value: string | null = null) => {
+    if (readOnly || !editorRef.current) return;
+    editorRef.current.focus();
+    document.execCommand(command, false, value || undefined);
+    handleInput();
+  };
+
+  const insertTable = () => {
+    if (readOnly || !editorRef.current) return;
+    
+    const rows = prompt("Number of rows:", "3");
+    const cols = prompt("Number of columns:", "3");
+    
+    if (!rows || !cols || isNaN(parseInt(rows)) || isNaN(parseInt(cols))) {
+      return;
+    }
+    
+    const numRows = parseInt(rows);
+    const numCols = parseInt(cols);
+    
+    if (numRows < 1 || numRows > 20 || numCols < 1 || numCols > 10) {
+      alert("Please enter valid dimensions (1-20 rows, 1-10 columns)");
+      return;
+    }
+    
+    editorRef.current.focus();
+    
+    // Create table HTML
+    let tableHTML = '<table style="border-collapse: collapse; width: 100%; margin: 10px 0; border: 1px solid #dee2e6;"><thead><tr>';
+    for (let i = 0; i < numCols; i++) {
+      tableHTML += `<th style="border: 1px solid #dee2e6; padding: 8px; background-color: #f8f9fa; font-weight: 600;">Header ${i + 1}</th>`;
+    }
+    tableHTML += "</tr></thead><tbody>";
+    for (let r = 0; r < numRows - 1; r++) {
+      tableHTML += "<tr>";
+      for (let c = 0; c < numCols; c++) {
+        tableHTML += '<td style="border: 1px solid #dee2e6; padding: 8px;">&nbsp;</td>';
+      }
+      tableHTML += "</tr>";
+    }
+    tableHTML += "</tbody></table>";
+    
+    // Insert table at cursor position
+    const selection = window.getSelection();
+    let range: Range | null = null;
+    
+    if (selection && selection.rangeCount > 0) {
+      range = selection.getRangeAt(0);
+      if (!editorRef.current.contains(range.commonAncestorContainer)) {
+        range = null;
+      }
+    }
+    
+    if (!range) {
+      range = document.createRange();
+      if (editorRef.current.childNodes.length > 0) {
+        range.selectNodeContents(editorRef.current);
+        range.collapse(false);
+      } else {
+        range.setStart(editorRef.current, 0);
+        range.setEnd(editorRef.current, 0);
+      }
+    }
+    
+    range.deleteContents();
+    const tempDiv = document.createElement("div");
+    tempDiv.innerHTML = tableHTML;
+    const tableNode = tempDiv.firstChild;
+    if (tableNode) {
+      range.insertNode(tableNode);
+      
+      // Move cursor after table
+      range.setStartAfter(tableNode);
+      range.collapse(true);
+      if (selection) {
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
+    }
+    
+    handleInput();
+  };
+
   return (
-    <div
-      ref={editorRef}
-      contentEditable={!readOnly}
-      onPaste={handlePaste}
-      onInput={handleInput}
-      onFocus={(e) => {
-        // Ensure cursor is positioned when focused
-        if (editorRef.current && !readOnly) {
-          const selection = window.getSelection();
-          if (selection && editorRef.current.childNodes.length > 0) {
-            const range = document.createRange();
-            range.selectNodeContents(editorRef.current);
-            range.collapse(false);
-            selection.removeAllRanges();
-            selection.addRange(range);
+    <div style={{ position: "relative" }}>
+      {!readOnly && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "4px",
+            padding: "6px 8px",
+            background: "#f8f9fa",
+            border: "1px solid #dee2e6",
+            borderBottom: "none",
+            borderRadius: "8px 8px 0 0",
+            flexWrap: "wrap",
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => formatText("bold")}
+            title="Bold"
+            style={{
+              background: "white",
+              border: "1px solid #dee2e6",
+              borderRadius: "4px",
+              padding: "6px 12px",
+              cursor: "pointer",
+              fontSize: "13px",
+              color: "#333",
+              minWidth: "32px",
+              height: "32px",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "#e9ecef";
+              e.currentTarget.style.borderColor = "var(--primary-color, #007bff)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "white";
+              e.currentTarget.style.borderColor = "#dee2e6";
+            }}
+          >
+            <strong>B</strong>
+          </button>
+          <button
+            type="button"
+            onClick={() => formatText("italic")}
+            title="Italic"
+            style={{
+              background: "white",
+              border: "1px solid #dee2e6",
+              borderRadius: "4px",
+              padding: "6px 12px",
+              cursor: "pointer",
+              fontSize: "13px",
+              color: "#333",
+              minWidth: "32px",
+              height: "32px",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "#e9ecef";
+              e.currentTarget.style.borderColor = "var(--primary-color, #007bff)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "white";
+              e.currentTarget.style.borderColor = "#dee2e6";
+            }}
+          >
+            <em>I</em>
+          </button>
+          <button
+            type="button"
+            onClick={() => formatText("underline")}
+            title="Underline"
+            style={{
+              background: "white",
+              border: "1px solid #dee2e6",
+              borderRadius: "4px",
+              padding: "6px 12px",
+              cursor: "pointer",
+              fontSize: "13px",
+              color: "#333",
+              minWidth: "32px",
+              height: "32px",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "#e9ecef";
+              e.currentTarget.style.borderColor = "var(--primary-color, #007bff)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "white";
+              e.currentTarget.style.borderColor = "#dee2e6";
+            }}
+          >
+            <u>U</u>
+          </button>
+          <div
+            style={{
+              width: "1px",
+              height: "24px",
+              background: "#dee2e6",
+              margin: "0 4px",
+            }}
+          />
+          <button
+            type="button"
+            onClick={insertTable}
+            title="Insert Table"
+            style={{
+              background: "white",
+              border: "1px solid #dee2e6",
+              borderRadius: "4px",
+              padding: "6px 12px",
+              cursor: "pointer",
+              fontSize: "13px",
+              color: "#333",
+              minWidth: "32px",
+              height: "32px",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "#e9ecef";
+              e.currentTarget.style.borderColor = "var(--primary-color, #007bff)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "white";
+              e.currentTarget.style.borderColor = "#dee2e6";
+            }}
+          >
+            📊 Table
+          </button>
+          <button
+            type="button"
+            onClick={() => formatText("insertUnorderedList")}
+            title="Bullet List"
+            style={{
+              background: "white",
+              border: "1px solid #dee2e6",
+              borderRadius: "4px",
+              padding: "6px 12px",
+              cursor: "pointer",
+              fontSize: "13px",
+              color: "#333",
+              minWidth: "32px",
+              height: "32px",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "#e9ecef";
+              e.currentTarget.style.borderColor = "var(--primary-color, #007bff)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "white";
+              e.currentTarget.style.borderColor = "#dee2e6";
+            }}
+          >
+            • List
+          </button>
+          <button
+            type="button"
+            onClick={() => formatText("insertOrderedList")}
+            title="Numbered List"
+            style={{
+              background: "white",
+              border: "1px solid #dee2e6",
+              borderRadius: "4px",
+              padding: "6px 12px",
+              cursor: "pointer",
+              fontSize: "13px",
+              color: "#333",
+              minWidth: "32px",
+              height: "32px",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "#e9ecef";
+              e.currentTarget.style.borderColor = "var(--primary-color, #007bff)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "white";
+              e.currentTarget.style.borderColor = "#dee2e6";
+            }}
+          >
+            1. List
+          </button>
+        </div>
+      )}
+      <div
+        ref={editorRef}
+        contentEditable={!readOnly}
+        onPaste={handlePaste}
+        onInput={handleInput}
+        onFocus={(e) => {
+          // Ensure cursor is positioned when focused
+          if (editorRef.current && !readOnly) {
+            const selection = window.getSelection();
+            if (selection && editorRef.current.childNodes.length > 0) {
+              const range = document.createRange();
+              range.selectNodeContents(editorRef.current);
+              range.collapse(false);
+              selection.removeAllRanges();
+              selection.addRange(range);
+            }
           }
-        }
-      }}
-      className={`rich-text-editor ${className} ${readOnly ? "read-only" : ""}`}
-      style={{
-        minHeight: "120px",
-        padding: "8px",
-        border: "1px solid #dee2e6",
-        borderRadius: "8px",
-        outline: "none",
-        backgroundColor: readOnly ? "#f8f9fa" : "#ffffff",
-        cursor: readOnly ? "default" : "text",
-        overflowWrap: "break-word",
-        wordWrap: "break-word",
-      }}
-      data-placeholder={placeholder}
-      suppressContentEditableWarning={true}
-    />
+        }}
+        className={`rich-text-editor ${className} ${readOnly ? "read-only" : ""}`}
+        style={{
+          minHeight: "120px",
+          padding: "8px",
+          border: "1px solid #dee2e6",
+          borderRadius: readOnly ? "8px" : "0 0 8px 8px",
+          outline: "none",
+          backgroundColor: readOnly ? "#f8f9fa" : "#ffffff",
+          cursor: readOnly ? "default" : "text",
+          overflowWrap: "break-word",
+          wordWrap: "break-word",
+        }}
+        data-placeholder={placeholder}
+        suppressContentEditableWarning={true}
+      />
+    </div>
   );
 };
 

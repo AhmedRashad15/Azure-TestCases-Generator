@@ -68,6 +68,70 @@ const App: React.FC = () => {
             </div>
           </div>
 
+          {storyData.related_stories && storyData.related_stories.length > 0 && (
+            <div className="card">
+              <h2>2b. Related User Stories</h2>
+              <div style={{ marginTop: "10px" }}>
+                {storyData.related_stories.map((relatedStory, index) => (
+                  <div
+                    key={relatedStory.id || index}
+                    style={{
+                      border: "1px solid #dee2e6",
+                      borderRadius: "6px",
+                      padding: "15px",
+                      marginBottom: "15px",
+                      backgroundColor: "#fafbfc",
+                    }}
+                  >
+                    <h3 style={{ marginTop: "0", marginBottom: "10px" }}>
+                      {relatedStory.title} {relatedStory.id && `(ID: ${relatedStory.id})`}
+                    </h3>
+                    
+                    <div style={{ marginBottom: "15px" }}>
+                      <label style={{ fontWeight: "bold", display: "block", marginBottom: "5px" }}>
+                        Description:
+                      </label>
+                      <RichTextEditor
+                        value={relatedStory.description}
+                        onChange={(html) => {
+                          // Update related story description
+                          const updatedRelatedStories = [...(storyData.related_stories || [])];
+                          updatedRelatedStories[index] = {
+                            ...updatedRelatedStories[index],
+                            description: html,
+                          };
+                          setStoryData({ ...storyData, related_stories: updatedRelatedStories });
+                        }}
+                        readOnly={false}
+                        placeholder="Related story description..."
+                      />
+                    </div>
+                    
+                    <div>
+                      <label style={{ fontWeight: "bold", display: "block", marginBottom: "5px" }}>
+                        Acceptance Criteria:
+                      </label>
+                      <RichTextEditor
+                        value={relatedStory.acceptance_criteria}
+                        onChange={(html) => {
+                          // Update related story acceptance criteria
+                          const updatedRelatedStories = [...(storyData.related_stories || [])];
+                          updatedRelatedStories[index] = {
+                            ...updatedRelatedStories[index],
+                            acceptance_criteria: html,
+                          };
+                          setStoryData({ ...storyData, related_stories: updatedRelatedStories });
+                        }}
+                        readOnly={false}
+                        placeholder="Related story acceptance criteria..."
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="card">
             <h2>2a. Story Analysis</h2>
             <StoryAnalysis storyData={storyData} />

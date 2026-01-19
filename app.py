@@ -53,13 +53,78 @@ else:
 # --- Flask App ---
 app = Flask(__name__)
 
+def extract_table_from_html(table_element):
+    """Extract and format a table element into readable text format"""
+    if not table_element:
+        return ""
+    
+    rows = table_element.find_all('tr')
+    if not rows:
+        return ""
+    
+    table_text = []
+    table_text.append("\n[TABLE START]")
+    
+    for row in rows:
+        cells = row.find_all(['td', 'th'])
+        if not cells:
+            continue
+        
+        # Extract text from each cell, preserving structure
+        cell_texts = []
+        for cell in cells:
+            # Get all text nodes and join them properly
+            # Use get_text with separator to handle nested elements
+            cell_text = cell.get_text(separator=' ', strip=True)
+            
+            # Aggressively normalize all whitespace - this is critical for related stories
+            # Replace all types of whitespace (spaces, tabs, newlines, etc.) with single space
+            cell_text = re.sub(r'\s+', ' ', cell_text)
+            
+            # Remove leading/trailing whitespace
+            cell_text = cell_text.strip()
+            
+            # Only add non-empty cells
+            if cell_text:
+                cell_texts.append(cell_text)
+        
+        # Only add row if it has cells
+        if cell_texts:
+            # Join cells with pipe separator (with spaces for readability)
+            row_text = " | ".join(cell_texts)
+            table_text.append(row_text)
+    
+    table_text.append("[TABLE END]\n")
+    # Join all rows with newlines, ensuring no extra spaces
+    result = "\n".join(table_text)
+    # Final cleanup: ensure no multiple consecutive spaces anywhere
+    result = re.sub(r' {2,}', ' ', result)
+    return result
+
 def extract_images_from_html(html_content):
-    """Extract images from HTML content and return list of PIL Image objects and text with placeholders"""
+    """Extract images and tables from HTML content and return list of PIL Image objects and text with placeholders"""
     if not html_content:
         return [], ""
     
+    # Normalize HTML content - remove extra whitespace but preserve structure
+    # This helps with tables that might have inconsistent spacing, especially from related stories
+    # First, normalize whitespace within table tags specifically
+    html_content = re.sub(r'(<table[^>]*>)\s+', r'\1', html_content, flags=re.IGNORECASE)
+    html_content = re.sub(r'\s+(</table>)', r'\1', html_content, flags=re.IGNORECASE)
+    html_content = re.sub(r'(<tr[^>]*>)\s+', r'\1', html_content, flags=re.IGNORECASE)
+    html_content = re.sub(r'\s+(</tr>)', r'\1', html_content, flags=re.IGNORECASE)
+    html_content = re.sub(r'(<td[^>]*>)\s+', r'\1', html_content, flags=re.IGNORECASE)
+    html_content = re.sub(r'\s+(</td>)', r'\1', html_content, flags=re.IGNORECASE)
+    html_content = re.sub(r'(<th[^>]*>)\s+', r'\1', html_content, flags=re.IGNORECASE)
+    html_content = re.sub(r'\s+(</th>)', r'\1', html_content, flags=re.IGNORECASE)
+    # Then normalize general whitespace
+    html_content = re.sub(r'[ \t]+', ' ', html_content)
+    # Normalize multiple newlines to single newline
+    html_content = re.sub(r'\n\s*\n+', '\n', html_content)
+    
     soup = BeautifulSoup(html_content, 'html.parser')
     images = soup.find_all('img')
+    tables = soup.find_all('table')
     
     image_objects = []
     
@@ -101,9 +166,32 @@ def extract_images_from_html(html_content):
             alt_text = img.get('alt', 'image')
             img.replace_with(f"[Image: {alt_text} - external URL]")
     
-    # Get text content with placeholders - preserve newlines for step detection
-    # Use separator='\n' to preserve line breaks which are important for step detection
+    # Process tables and replace with formatted text
+    # Replace tables with their extracted text directly, but normalize surrounding whitespace
+    for table in tables:
+        table_text = extract_table_from_html(table)
+        if table_text:
+            # Replace table with the formatted text
+            # The table text already has proper newlines, so we just replace directly
+            table.replace_with(table_text)
+    
+    # Get text content - use newline separator to preserve structure for step detection
+    # But we'll clean up extra whitespace afterwards
     text_content = soup.get_text(separator='\n', strip=True)
+    
+    # Final cleanup: normalize multiple consecutive newlines and spaces
+    # This is critical for related stories that may have extra whitespace
+    text_content = re.sub(r'\n\s*\n+', '\n\n', text_content)  # Max 2 newlines
+    text_content = re.sub(r'[ \t]+', ' ', text_content)  # Multiple spaces/tabs to single space
+    text_content = re.sub(r' \n', '\n', text_content)  # Remove space before newline
+    text_content = re.sub(r'\n ', '\n', text_content)  # Remove space after newline
+    # Remove any remaining multiple spaces (shouldn't happen, but just in case)
+    text_content = re.sub(r' {2,}', ' ', text_content)
+    # Clean up spaces around table markers
+    text_content = re.sub(r' +\[TABLE', '\n[TABLE', text_content)
+    text_content = re.sub(r'\[TABLE +', '[TABLE ', text_content)
+    text_content = re.sub(r' +TABLE END\]', ' TABLE END]\n', text_content)
+    text_content = re.sub(r'TABLE END\] +', 'TABLE END]\n', text_content)
     
     return image_objects, text_content
 
@@ -352,7 +440,29 @@ def call_ai_provider(ai_provider, prompt, images=None, gemini_api_key=None, clau
             print(f"ERROR in Gemini API call: {gemini_error}")
             import traceback
             traceback.print_exc()
-            raise ValueError(f"Gemini API error: {str(gemini_error)}")
+            error_str = str(gemini_error)
+            
+            # Check for quota/rate limit errors
+            if '429' in error_str or 'quota' in error_str.lower() or 'rate limit' in error_str.lower() or 'exceeded' in error_str.lower():
+                # Try to extract retry delay if available
+                retry_delay = None
+                if 'retry' in error_str.lower() or 'seconds' in error_str.lower():
+                    import re
+                    delay_match = re.search(r'(\d+)\s*seconds?', error_str, re.IGNORECASE)
+                    if delay_match:
+                        retry_delay = int(delay_match.group(1))
+                
+                error_msg = f"Gemini API quota/rate limit exceeded: {error_str}"
+                if retry_delay:
+                    error_msg += f"\n\nPlease wait approximately {retry_delay} seconds before retrying, or switch to Claude API provider."
+                else:
+                    error_msg += "\n\nPlease wait a few minutes before retrying, or switch to Claude API provider."
+                raise ValueError(error_msg)
+            # Check for authentication errors
+            elif '401' in error_str or '403' in error_str or 'authentication' in error_str.lower() or 'api_key' in error_str.lower():
+                raise ValueError(f"Gemini API authentication error: {error_str}. Please check your GEMINI_API_KEY.")
+            else:
+                raise ValueError(f"Gemini API error: {error_str}")
 
 @app.route('/')
 def index():
@@ -407,13 +517,17 @@ def fetch_story():
                         r_title = r_fields.get('System.Title', '')
                         r_desc_html = r_fields.get('System.Description', '')
                         r_ac_html = r_fields.get('Microsoft.VSTS.Common.AcceptanceCriteria', '')
-                        r_desc = BeautifulSoup(r_desc_html, "html.parser").get_text(separator="\n").strip()
-                        r_ac = BeautifulSoup(r_ac_html, "html.parser").get_text(separator="\n").strip()
+                        
+                        # Convert Azure DevOps image URLs to base64 data URLs (preserve HTML including tables)
+                        r_desc_html = convert_azure_devops_images_to_base64(r_desc_html, azure_devops_org_url, azure_devops_pat)
+                        r_ac_html = convert_azure_devops_images_to_base64(r_ac_html, azure_devops_org_url, azure_devops_pat)
+                        
+                        # Keep HTML for rich text editor (preserves tables and structure)
                         related_stories.append({
                             'id': related_id,
                             'title': r_title,
-                            'description': r_desc,
-                            'acceptance_criteria': r_ac
+                            'description': r_desc_html,  # Keep as HTML to preserve tables
+                            'acceptance_criteria': r_ac_html  # Keep as HTML to preserve tables
                         })
                     except Exception as e:
                         continue
@@ -565,6 +679,7 @@ def _generate_cases_for_type(ai_provider, story_title, story_description, accept
 - **Pagination (for lists):** Generate positive test cases for key pagination scenarios (first/last pages, navigation controls) - prioritize the most important scenarios.
 - **Boundary Values (for numeric fields):** Generate positive test cases for valid boundary values (minimum, maximum, zero if allowed) - focus on critical fields.
 - **Generate 3-12 positive test cases** for most stories, focusing on core functionality and critical paths.
+- **IMPORTANT: Do not artificially limit the number of test cases. If the story has multiple acceptance criteria, workflows, or data dictionary fields, generate test cases to cover them all. Generate enough test cases to provide comprehensive coverage of all acceptance criteria and key scenarios.**
 - **Title Examples:** "[Positive] User successfully creates account with valid information", "[Positive] System saves data when all required fields are completed", "[Positive] Pagination controls work correctly when navigating to page 2", "[Positive] System accepts minimum value (0) for quantity field".""",
         "Negative": """
 **Negative Test Case Guidelines:**
@@ -768,6 +883,7 @@ Now, generate ONLY the `{case_type}` test cases based on all these instructions.
 - The goal is balanced, meaningful test coverage - avoid both minimal sets and excessive over-generation
 - Do not generate duplicate test cases. Each test case must be unique in its condition, steps, and expected result.
 - If the story is simple, generate fewer test cases. If complex, generate more, but always stay within reasonable bounds (typically 5-15 test cases per type for most stories).
+- **CRITICAL: Do not artificially limit test cases. Generate enough test cases to comprehensively cover all acceptance criteria, key workflows, and important scenarios. If you have 5 acceptance criteria, generate at least 5-8 positive test cases. If you have 10 acceptance criteria, generate 10-15 positive test cases. Ensure each acceptance criterion is covered by at least one positive test case.**
 - **FOR NEGATIVE TEST CASES SPECIFICALLY: You MUST generate at least 3 negative test cases. If you cannot identify explicit validation rules, generate negative test cases for common failure scenarios such as: missing required inputs, invalid data formats, empty/null values, invalid user actions, or system error conditions. Never return an empty array for negative test cases.**
 
 **CRITICAL: You MUST return ONLY a valid JSON array. Do not include any explanatory text, markdown formatting, or code blocks. Return ONLY the JSON array starting with [ and ending with ].**
@@ -980,6 +1096,49 @@ def generate_test_cases_stream():
         ac_images, ac_text = extract_images_from_html(acceptance_criteria)
         dict_images, dict_text = extract_images_from_html(data_dictionary)
         
+        # Process related stories to extract images and tables
+        related_stories_processed = []
+        related_images = []
+        if related_stories:
+            print(f"DEBUG: Processing {len(related_stories)} related stories")
+            for idx, related_story in enumerate(related_stories):
+                related_desc = related_story.get('description', '')
+                related_ac = related_story.get('acceptance_criteria', '')
+                
+                print(f"DEBUG: Related story {idx+1} - Description length: {len(related_desc)}, AC length: {len(related_ac)}")
+                print(f"DEBUG: Related story {idx+1} - Description preview (first 200 chars): {related_desc[:200] if related_desc else 'EMPTY'}")
+                print(f"DEBUG: Related story {idx+1} - AC preview (first 200 chars): {related_ac[:200] if related_ac else 'EMPTY'}")
+                
+                # Extract images and text (including tables) from related story HTML
+                rel_desc_images, rel_desc_text = extract_images_from_html(related_desc)
+                rel_ac_images, rel_ac_text = extract_images_from_html(related_ac)
+                
+                print(f"DEBUG: Related story {idx+1} - After extraction - Desc text length: {len(rel_desc_text)}, AC text length: {len(rel_ac_text)}")
+                if '[TABLE' in rel_desc_text or '[TABLE' in rel_ac_text:
+                    print(f"DEBUG: Related story {idx+1} - TABLES DETECTED in extracted text!")
+                    # Show table sections for debugging
+                    if '[TABLE' in rel_desc_text:
+                        table_start = rel_desc_text.find('[TABLE')
+                        table_end = rel_desc_text.find('TABLE END]', table_start) + 10
+                        if table_end > table_start:
+                            print(f"DEBUG: Related story {idx+1} - Table in description: {rel_desc_text[table_start:min(table_end+50, len(rel_desc_text))]}")
+                    if '[TABLE' in rel_ac_text:
+                        table_start = rel_ac_text.find('[TABLE')
+                        table_end = rel_ac_text.find('TABLE END]', table_start) + 10
+                        if table_end > table_start:
+                            print(f"DEBUG: Related story {idx+1} - Table in AC: {rel_ac_text[table_start:min(table_end+50, len(rel_ac_text))]}")
+                
+                # Collect images from related stories
+                related_images.extend(rel_desc_images)
+                related_images.extend(rel_ac_images)
+                
+                # Create processed related story with extracted text (tables included)
+                related_stories_processed.append({
+                    'title': related_story.get('title', ''),
+                    'description': rel_desc_text,  # Now includes formatted tables
+                    'acceptance_criteria': rel_ac_text  # Now includes formatted tables
+                })
+        
         # Debug: Check if steps are detected in acceptance criteria (after HTML extraction)
         has_steps_debug, steps_text_debug = _detect_steps_in_acceptance_criteria(ac_text)
         print(f"DEBUG: Acceptance criteria text length: {len(ac_text) if ac_text else 0}")
@@ -989,9 +1148,9 @@ def generate_test_cases_stream():
         else:
             print(f"DEBUG: No steps detected. AC preview: {ac_text[:300] if ac_text else 'None'}")
         
-        # Collect all images
-        all_images = desc_images + ac_images + dict_images
-        print(f"DEBUG: Found {len(all_images)} images for test case generation")
+        # Collect all images (main story + related stories)
+        all_images = desc_images + ac_images + dict_images + related_images
+        print(f"DEBUG: Found {len(all_images)} images for test case generation ({len(desc_images + ac_images + dict_images)} from main story, {len(related_images)} from related stories)")
         
         def generate():
             try:
@@ -1000,11 +1159,11 @@ def generate_test_cases_stream():
 
                 for case_type in case_types:
                     try:
-                        print(f"DEBUG: Calling _generate_cases_for_type for {case_type} with related_stories:", related_stories)
+                        print(f"DEBUG: Calling _generate_cases_for_type for {case_type} with related_stories:", related_stories_processed)
                         # Generate cases for the current type, including images
                         json_text_chunk = _generate_cases_for_type(
                             ai_provider, story_title, desc_text, ac_text, dict_text, case_type, 
-                            related_stories, all_images, ambiguity_aware,
+                            related_stories_processed, all_images, ambiguity_aware,
                             gemini_api_key=gemini_api_key,
                             claude_api_key=claude_api_key
                         )
@@ -1575,6 +1734,16 @@ def convert_azure_devops_images_to_base64(html_content, org_url, pat_token):
         return html_content
     
     soup = BeautifulSoup(html_content, 'html.parser')
+    
+    # Debug: Check if HTML contains tables
+    tables = soup.find_all('table')
+    if tables:
+        print(f"DEBUG: Found {len(tables)} table(s) in HTML content")
+    else:
+        print("DEBUG: No <table> tags found in HTML content")
+        # Check if there are table-like structures that might need conversion
+        # Azure DevOps sometimes uses div-based tables or other structures
+    
     images = soup.find_all('img')
     
     for img in images:

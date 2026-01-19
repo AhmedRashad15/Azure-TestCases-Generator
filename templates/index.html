@@ -309,6 +309,112 @@
             color: var(--text-color);
             transition: border-color 0.2s, box-shadow 0.2s;
         }
+        
+        /* Table styles within rich text editor - use !important to override Azure DevOps inline styles */
+        .rich-text-editor table {
+            border-collapse: collapse !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 10px 0 !important;
+            border: 1px solid #dee2e6 !important;
+            display: table !important;
+            table-layout: auto !important;
+            box-sizing: border-box !important;
+        }
+        .rich-text-editor table th,
+        .rich-text-editor table td {
+            border: 1px solid #dee2e6 !important;
+            padding: 8px !important;
+            text-align: left !important;
+            display: table-cell !important;
+            box-sizing: border-box !important;
+            vertical-align: top !important;
+        }
+        .rich-text-editor table th {
+            background-color: #f8f9fa !important;
+            font-weight: 600 !important;
+        }
+        .rich-text-editor table tr {
+            display: table-row !important;
+        }
+        .rich-text-editor table tr:nth-child(even) {
+            background-color: #f8f9fa !important;
+        }
+        .rich-text-editor table thead {
+            display: table-header-group !important;
+        }
+        .rich-text-editor table tbody {
+            display: table-row-group !important;
+        }
+        .rich-text-editor table tfoot {
+            display: table-footer-group !important;
+        }
+        /* Ensure table containers don't hide tables */
+        .rich-text-editor div table {
+            display: table !important;
+            visibility: visible !important;
+        }
+        
+        /* Table styles for related stories (rel-desc-text and rel-ac-text) */
+        .rel-desc-text table,
+        .rel-ac-text table {
+            border-collapse: collapse !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 10px 0 !important;
+            border: 1px solid #dee2e6 !important;
+            display: table !important;
+            table-layout: auto !important;
+            box-sizing: border-box !important;
+            visibility: visible !important;
+        }
+        .rel-desc-text table th,
+        .rel-desc-text table td,
+        .rel-ac-text table th,
+        .rel-ac-text table td {
+            border: 1px solid #dee2e6 !important;
+            padding: 8px !important;
+            text-align: left !important;
+            display: table-cell !important;
+            box-sizing: border-box !important;
+            vertical-align: top !important;
+            visibility: visible !important;
+        }
+        .rel-desc-text table th,
+        .rel-ac-text table th {
+            background-color: #f8f9fa !important;
+            font-weight: 600 !important;
+        }
+        .rel-desc-text table tr,
+        .rel-ac-text table tr {
+            display: table-row !important;
+            visibility: visible !important;
+        }
+        .rel-desc-text table tr:nth-child(even),
+        .rel-ac-text table tr:nth-child(even) {
+            background-color: #f8f9fa !important;
+        }
+        .rel-desc-text table thead,
+        .rel-desc-text table tbody,
+        .rel-ac-text table thead,
+        .rel-ac-text table tbody {
+            display: table-header-group !important;
+            visibility: visible !important;
+        }
+        .rel-desc-text table tbody,
+        .rel-ac-text table tbody {
+            display: table-row-group !important;
+        }
+        .rel-desc-text table tfoot,
+        .rel-ac-text table tfoot {
+            display: table-footer-group !important;
+        }
+        /* Ensure nested tables in divs are visible */
+        .rel-desc-text div table,
+        .rel-ac-text div table {
+            display: table !important;
+            visibility: visible !important;
+        }
 
         .rich-text-editor:hover {
             border-color: var(--primary-color);
@@ -335,6 +441,68 @@
             color: #999;
             font-style: italic;
             pointer-events: none;
+        }
+        
+        /* Rich Text Editor Toolbar Styles */
+        .rich-text-editor-wrapper {
+            position: relative;
+            margin-bottom: 1em;
+        }
+        
+        .rich-text-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 6px 8px;
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-bottom: none;
+            border-radius: var(--border-radius) var(--border-radius) 0 0;
+            flex-wrap: wrap;
+        }
+        
+        .toolbar-btn {
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 6px 12px;
+            cursor: pointer;
+            font-size: 13px;
+            color: #333;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 32px;
+            height: 32px;
+        }
+        
+        .toolbar-btn:hover {
+            background: #e9ecef;
+            border-color: var(--primary-color);
+        }
+        
+        .toolbar-btn:active {
+            background: #dee2e6;
+        }
+        
+        .toolbar-btn strong,
+        .toolbar-btn em,
+        .toolbar-btn u {
+            font-weight: bold;
+            font-style: normal;
+            text-decoration: none;
+        }
+        
+        .toolbar-separator {
+            width: 1px;
+            height: 24px;
+            background: #dee2e6;
+            margin: 0 4px;
+        }
+        
+        .rich-text-editor-wrapper .rich-text-editor {
+            border-radius: 0 0 var(--border-radius) var(--border-radius);
         }
 
     </style>
@@ -368,29 +536,65 @@
             <input type="text" id="story-title" name="story_title">
 
             <label for="story-description">Description:</label>
-            <div id="story-description" 
-                 contenteditable="true" 
-                 class="rich-text-editor"
-                 style="min-height: 120px; padding: 8px; border: 1px solid var(--border-color); border-radius: var(--border-radius); background-color: #ffffff; outline: none; white-space: pre-wrap; word-wrap: break-word; overflow-y: auto;"
-                 data-placeholder="Enter story description..."></div>
+            <div class="rich-text-editor-wrapper">
+                <div class="rich-text-toolbar" data-editor-id="story-description">
+                    <button type="button" class="toolbar-btn" title="Bold" onclick="formatText('story-description', 'bold')"><strong>B</strong></button>
+                    <button type="button" class="toolbar-btn" title="Italic" onclick="formatText('story-description', 'italic')"><em>I</em></button>
+                    <button type="button" class="toolbar-btn" title="Underline" onclick="formatText('story-description', 'underline')"><u>U</u></button>
+                    <div class="toolbar-separator"></div>
+                    <button type="button" class="toolbar-btn" title="Insert Table" onclick="insertTable('story-description')">📊 Table</button>
+                    <button type="button" class="toolbar-btn" title="Bullet List" onclick="formatText('story-description', 'insertUnorderedList')">• List</button>
+                    <button type="button" class="toolbar-btn" title="Numbered List" onclick="formatText('story-description', 'insertOrderedList')">1. List</button>
+                </div>
+                <div id="story-description" 
+                     contenteditable="true" 
+                     class="rich-text-editor"
+                     style="min-height: 120px; padding: 8px; border: 1px solid var(--border-color); border-radius: var(--border-radius); background-color: #ffffff; outline: none; word-wrap: break-word; overflow-y: auto;"
+                     data-placeholder="Enter story description..."></div>
+            </div>
 
             <label for="acceptance-criteria">Acceptance Criteria:</label>
-            <div id="acceptance-criteria" 
-                 contenteditable="true" 
-                 class="rich-text-editor"
-                 style="min-height: 120px; padding: 8px; border: 1px solid var(--border-color); border-radius: var(--border-radius); background-color: #ffffff; outline: none; white-space: pre-wrap; word-wrap: break-word; overflow-y: auto;"
-                 data-placeholder="Enter acceptance criteria..."></div>
+            <div class="rich-text-editor-wrapper">
+                <div class="rich-text-toolbar" data-editor-id="acceptance-criteria">
+                    <button type="button" class="toolbar-btn" title="Bold" onclick="formatText('acceptance-criteria', 'bold')"><strong>B</strong></button>
+                    <button type="button" class="toolbar-btn" title="Italic" onclick="formatText('acceptance-criteria', 'italic')"><em>I</em></button>
+                    <button type="button" class="toolbar-btn" title="Underline" onclick="formatText('acceptance-criteria', 'underline')"><u>U</u></button>
+                    <div class="toolbar-separator"></div>
+                    <button type="button" class="toolbar-btn" title="Insert Table" onclick="insertTable('acceptance-criteria')">📊 Table</button>
+                    <button type="button" class="toolbar-btn" title="Bullet List" onclick="formatText('acceptance-criteria', 'insertUnorderedList')">• List</button>
+                    <button type="button" class="toolbar-btn" title="Numbered List" onclick="formatText('acceptance-criteria', 'insertOrderedList')">1. List</button>
+                </div>
+                <div id="acceptance-criteria" 
+                     contenteditable="true" 
+                     class="rich-text-editor"
+                     style="min-height: 120px; padding: 8px; border: 1px solid var(--border-color); border-radius: var(--border-radius); background-color: #ffffff; outline: none; word-wrap: break-word; overflow-y: auto;"
+                     data-placeholder="Enter acceptance criteria..."
+                     data-gramm="false"
+                     data-gramm_editor="false"
+                     data-enable-formatting="true"></div>
+            </div>
 
             <div id="related-stories-section" class="hidden">
                 <h3>Related User Stories</h3>
                 <div id="related-stories-list"></div>
             </div>
             <label for="data-dictionary">Data Dictionary (Optional):</label>
-            <div id="data-dictionary" 
-                 contenteditable="true" 
-                 class="rich-text-editor"
-                 style="min-height: 120px; padding: 8px; border: 1px solid var(--border-color); border-radius: var(--border-radius); background-color: #ffffff; outline: none; white-space: pre-wrap; word-wrap: break-word; overflow-y: auto;"
-                 data-placeholder="Enter data dictionary information..."></div>
+            <div class="rich-text-editor-wrapper">
+                <div class="rich-text-toolbar" data-editor-id="data-dictionary">
+                    <button type="button" class="toolbar-btn" title="Bold" onclick="formatText('data-dictionary', 'bold')"><strong>B</strong></button>
+                    <button type="button" class="toolbar-btn" title="Italic" onclick="formatText('data-dictionary', 'italic')"><em>I</em></button>
+                    <button type="button" class="toolbar-btn" title="Underline" onclick="formatText('data-dictionary', 'underline')"><u>U</u></button>
+                    <div class="toolbar-separator"></div>
+                    <button type="button" class="toolbar-btn" title="Insert Table" onclick="insertTable('data-dictionary')">📊 Table</button>
+                    <button type="button" class="toolbar-btn" title="Bullet List" onclick="formatText('data-dictionary', 'insertUnorderedList')">• List</button>
+                    <button type="button" class="toolbar-btn" title="Numbered List" onclick="formatText('data-dictionary', 'insertOrderedList')">1. List</button>
+                </div>
+                <div id="data-dictionary" 
+                     contenteditable="true" 
+                     class="rich-text-editor"
+                     style="min-height: 120px; padding: 8px; border: 1px solid var(--border-color); border-radius: var(--border-radius); background-color: #ffffff; outline: none; word-wrap: break-word; overflow-y: auto;"
+                     data-placeholder="Enter data dictionary information..."></div>
+            </div>
 
             <div style="margin-top: 1.5em; margin-bottom: 1em;">
                 <label for="ai-provider-analysis" style="margin-right: 10px; font-weight: 500;">AI Provider for Analysis:</label>
@@ -721,7 +925,10 @@
         function setEditorValue(editorId, html) {
             const editor = document.getElementById(editorId);
             if (editor && editor.contentEditable === 'true') {
+                // Set HTML content directly - this preserves tables and other HTML elements
                 editor.innerHTML = html || '';
+                // Trigger input event to ensure any listeners are notified
+                editor.dispatchEvent(new Event('input', { bubbles: true }));
             } else if (editor) {
                 editor.value = html || '';
             }
@@ -734,6 +941,95 @@
         function setAcceptanceCriteria(html) { setEditorValue('acceptance-criteria', html); }
         function getDataDictionary() { return getEditorValue('data-dictionary'); }
         function setDataDictionary(html) { setEditorValue('data-dictionary', html); }
+        
+        // Rich Text Formatting Functions
+        function formatText(editorId, command, value = null) {
+            const editor = document.getElementById(editorId);
+            if (!editor) return;
+            
+            editor.focus();
+            document.execCommand(command, false, value);
+            
+            // Trigger input event to update content
+            editor.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+        
+        function insertTable(editorId) {
+            const editor = document.getElementById(editorId);
+            if (!editor) return;
+            
+            // Prompt for table dimensions
+            const rows = prompt('Number of rows:', '3');
+            const cols = prompt('Number of columns:', '3');
+            
+            if (!rows || !cols || isNaN(rows) || isNaN(cols)) {
+                return;
+            }
+            
+            const numRows = parseInt(rows);
+            const numCols = parseInt(cols);
+            
+            if (numRows < 1 || numRows > 20 || numCols < 1 || numCols > 10) {
+                alert('Please enter valid dimensions (1-20 rows, 1-10 columns)');
+                return;
+            }
+            
+            editor.focus();
+            
+            // Create table HTML
+            let tableHTML = '<table style="border-collapse: collapse; width: 100%; margin: 10px 0; border: 1px solid #dee2e6;"><thead><tr>';
+            for (let i = 0; i < numCols; i++) {
+                tableHTML += '<th style="border: 1px solid #dee2e6; padding: 8px; background-color: #f8f9fa; font-weight: 600;">Header ' + (i + 1) + '</th>';
+            }
+            tableHTML += '</tr></thead><tbody>';
+            for (let r = 0; r < numRows - 1; r++) {
+                tableHTML += '<tr>';
+                for (let c = 0; c < numCols; c++) {
+                    tableHTML += '<td style="border: 1px solid #dee2e6; padding: 8px;">&nbsp;</td>';
+                }
+                tableHTML += '</tr>';
+            }
+            tableHTML += '</tbody></table>';
+            
+            // Insert table at cursor position
+            const selection = window.getSelection();
+            let range = null;
+            
+            if (selection && selection.rangeCount > 0) {
+                range = selection.getRangeAt(0);
+                if (!editor.contains(range.commonAncestorContainer)) {
+                    range = null;
+                }
+            }
+            
+            if (!range) {
+                range = document.createRange();
+                if (editor.childNodes.length > 0) {
+                    range.selectNodeContents(editor);
+                    range.collapse(false);
+                } else {
+                    range.setStart(editor, 0);
+                    range.setEnd(editor, 0);
+                }
+            }
+            
+            range.deleteContents();
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = tableHTML;
+            const tableNode = tempDiv.firstChild;
+            range.insertNode(tableNode);
+            
+            // Move cursor after table
+            range.setStartAfter(tableNode);
+            range.collapse(true);
+            if (selection) {
+                selection.removeAllRanges();
+                selection.addRange(range);
+            }
+            
+            // Trigger input event
+            editor.dispatchEvent(new Event('input', { bubbles: true }));
+        }
 
         async function fetchStory() {
             const storyId = document.getElementById('user-story-id').value;
@@ -767,7 +1063,22 @@
                 const data = await response.json();
                 document.getElementById('story-title').value = data.title;
                 setDescription(data.description || '');
+                // Debug: Check if acceptance criteria contains tables
+                if (data.acceptance_criteria && data.acceptance_criteria.includes('<table')) {
+                    console.log('DEBUG: Acceptance criteria contains table HTML');
+                    console.log('Table HTML preview:', data.acceptance_criteria.substring(0, 500));
+                }
                 setAcceptanceCriteria(data.acceptance_criteria || '');
+                // Verify table was set
+                setTimeout(() => {
+                    const acEditor = document.getElementById('acceptance-criteria');
+                    if (acEditor && acEditor.querySelector('table')) {
+                        console.log('DEBUG: Table found in acceptance criteria editor after setting');
+                    } else if (data.acceptance_criteria && data.acceptance_criteria.includes('<table')) {
+                        console.warn('DEBUG: Table HTML was in data but not found in editor after setting');
+                        console.warn('Editor innerHTML length:', acEditor ? acEditor.innerHTML.length : 0);
+                    }
+                }, 100);
                 storyDetails.classList.remove('hidden');
                 storyAnalysisSection.classList.add('hidden');
                 testCasesSection.classList.add('hidden');
@@ -790,14 +1101,44 @@
                             <div class="related-story-content" style="display:none; padding:0.5em 2em 1em 2.5em; font-size:0.97em; background:#fafbfc;">
                                 <div class="related-story-view">
                                     <div><strong>Title:</strong> <span class="rel-title-text">${rel.title}</span></div>
-                                    <div><strong>Description:</strong> <span class="rel-desc-text">${rel.description.replace(/\n/g, '<br>')}</span></div>
-                                    <div><strong>Acceptance Criteria:</strong> <span class="rel-ac-text">${rel.acceptance_criteria && rel.acceptance_criteria.trim() ? rel.acceptance_criteria.replace(/\n/g, '<br>') : '(None)'}</span></div>
+                                    <div style="margin-top:10px;"><strong>Description:</strong> 
+                                        <div class="rel-desc-text" style="margin-top:5px; padding:10px; background:white; border:1px solid #dee2e6; border-radius:4px; min-height:50px; overflow-x:auto; overflow-y:visible;">${rel.description || '(None)'}</div>
+                                    </div>
+                                    <div style="margin-top:10px;"><strong>Acceptance Criteria:</strong> 
+                                        <div class="rel-ac-text" style="margin-top:5px; padding:10px; background:white; border:1px solid #dee2e6; border-radius:4px; min-height:50px; overflow-x:auto; overflow-y:visible;">${rel.acceptance_criteria && rel.acceptance_criteria.trim() ? rel.acceptance_criteria : '(None)'}</div>
+                                    </div>
                                     <button class="rel-edit-btn" style="margin-top:0.7em;">Edit</button>
                                 </div>
                                 <div class="related-story-edit" style="display:none;">
                                     <div><strong>Title:</strong> <input type="text" class="rel-title-input" style="width:100%;" value="${rel.title}"></div>
-                                    <div><strong>Description:</strong> <textarea class="rel-desc-input" style="width:100%; min-height:60px;">${rel.description}</textarea></div>
-                                    <div><strong>Acceptance Criteria:</strong> <textarea class="rel-ac-input" style="width:100%; min-height:40px;">${rel.acceptance_criteria}</textarea></div>
+                                    <div style="margin-top:10px;"><strong>Description:</strong> 
+                                        <div class="rich-text-editor-wrapper">
+                                            <div class="rich-text-toolbar" data-editor-id="rel-desc-editor-${idx}">
+                                                <button type="button" class="toolbar-btn" title="Bold" onclick="formatText('rel-desc-editor-${idx}', 'bold')"><strong>B</strong></button>
+                                                <button type="button" class="toolbar-btn" title="Italic" onclick="formatText('rel-desc-editor-${idx}', 'italic')"><em>I</em></button>
+                                                <button type="button" class="toolbar-btn" title="Underline" onclick="formatText('rel-desc-editor-${idx}', 'underline')"><u>U</u></button>
+                                                <div class="toolbar-separator"></div>
+                                                <button type="button" class="toolbar-btn" title="Insert Table" onclick="insertTable('rel-desc-editor-${idx}')">📊 Table</button>
+                                                <button type="button" class="toolbar-btn" title="Bullet List" onclick="formatText('rel-desc-editor-${idx}', 'insertUnorderedList')">• List</button>
+                                                <button type="button" class="toolbar-btn" title="Numbered List" onclick="formatText('rel-desc-editor-${idx}', 'insertOrderedList')">1. List</button>
+                                            </div>
+                                            <div id="rel-desc-editor-${idx}" class="rel-desc-editor rich-text-editor" contenteditable="true" data-placeholder="Enter description..." style="width:100%; min-height:100px; padding:10px; border:1px solid #dee2e6; border-radius:0 0 4px 4px; background:white;">${rel.description || ''}</div>
+                                        </div>
+                                    </div>
+                                    <div style="margin-top:10px;"><strong>Acceptance Criteria:</strong> 
+                                        <div class="rich-text-editor-wrapper">
+                                            <div class="rich-text-toolbar" data-editor-id="rel-ac-editor-${idx}">
+                                                <button type="button" class="toolbar-btn" title="Bold" onclick="formatText('rel-ac-editor-${idx}', 'bold')"><strong>B</strong></button>
+                                                <button type="button" class="toolbar-btn" title="Italic" onclick="formatText('rel-ac-editor-${idx}', 'italic')"><em>I</em></button>
+                                                <button type="button" class="toolbar-btn" title="Underline" onclick="formatText('rel-ac-editor-${idx}', 'underline')"><u>U</u></button>
+                                                <div class="toolbar-separator"></div>
+                                                <button type="button" class="toolbar-btn" title="Insert Table" onclick="insertTable('rel-ac-editor-${idx}')">📊 Table</button>
+                                                <button type="button" class="toolbar-btn" title="Bullet List" onclick="formatText('rel-ac-editor-${idx}', 'insertUnorderedList')">• List</button>
+                                                <button type="button" class="toolbar-btn" title="Numbered List" onclick="formatText('rel-ac-editor-${idx}', 'insertOrderedList')">1. List</button>
+                                            </div>
+                                            <div id="rel-ac-editor-${idx}" class="rel-ac-editor rich-text-editor" contenteditable="true" data-placeholder="Enter acceptance criteria..." style="width:100%; min-height:100px; padding:10px; border:1px solid #dee2e6; border-radius:0 0 4px 4px; background:white;">${rel.acceptance_criteria || ''}</div>
+                                        </div>
+                                    </div>
                                     <button class="rel-save-btn" style="margin-top:0.7em;">Save</button>
                                     <button class="rel-cancel-btn" style="margin-top:0.7em; margin-left:0.7em;">Cancel</button>
                                 </div>
@@ -836,12 +1177,20 @@
                     if (editBtn) {
                         editBtn.addEventListener('click', function(e) {
                             e.stopPropagation();
-                            // Save original values
+                            // Save original values and populate editors with HTML content
+                            const descEditor = editDiv.querySelector('[id^="rel-desc-editor-"]');
+                            const acEditor = editDiv.querySelector('[id^="rel-ac-editor-"]');
                             original = {
-                                title: editDiv.querySelector('.rel-title-input').value,
-                                desc: editDiv.querySelector('.rel-desc-input').value,
-                                ac: editDiv.querySelector('.rel-ac-input').value
+                                title: viewDiv.querySelector('.rel-title-text').textContent,
+                                desc: viewDiv.querySelector('.rel-desc-text').innerHTML,
+                                ac: viewDiv.querySelector('.rel-ac-text').innerHTML === '(None)' ? '' : viewDiv.querySelector('.rel-ac-text').innerHTML
                             };
+                            if (descEditor) {
+                                descEditor.innerHTML = original.desc === '(None)' ? '' : original.desc;
+                            }
+                            if (acEditor) {
+                                acEditor.innerHTML = original.ac;
+                            }
                             viewDiv.style.display = 'none';
                             editDiv.style.display = 'block';
                         });
@@ -849,13 +1198,17 @@
                     if (saveBtn) {
                         saveBtn.addEventListener('click', function(e) {
                             e.stopPropagation();
-                            // Update view with new values
+                            // Update view with new values - get HTML from rich text editors
                             const newTitle = editDiv.querySelector('.rel-title-input').value;
-                            const newDesc = editDiv.querySelector('.rel-desc-input').value;
-                            const newAc = editDiv.querySelector('.rel-ac-input').value;
+                            const descEditor = editDiv.querySelector('[id^="rel-desc-editor-"]');
+                            const acEditor = editDiv.querySelector('[id^="rel-ac-editor-"]');
+                            const newDesc = descEditor ? descEditor.innerHTML : '';
+                            const newAc = acEditor ? acEditor.innerHTML : '';
+                            
                             viewDiv.querySelector('.rel-title-text').textContent = newTitle;
-                            viewDiv.querySelector('.rel-desc-text').innerHTML = newDesc.replace(/\n/g, '<br>');
-                            viewDiv.querySelector('.rel-ac-text').innerHTML = newAc && newAc.trim() ? newAc.replace(/\n/g, '<br>') : '(None)';
+                            viewDiv.querySelector('.rel-desc-text').innerHTML = newDesc || '(None)';
+                            viewDiv.querySelector('.rel-ac-text').innerHTML = newAc && newAc.trim() ? newAc : '(None)';
+                            
                             // Update the data in the related_stories array
                             data.related_stories[idx].title = newTitle;
                             data.related_stories[idx].description = newDesc;
@@ -870,8 +1223,14 @@
                             // Revert to original values
                             if (original) {
                                 editDiv.querySelector('.rel-title-input').value = original.title;
-                                editDiv.querySelector('.rel-desc-input').value = original.desc;
-                                editDiv.querySelector('.rel-ac-input').value = original.ac;
+                                const descEditor = editDiv.querySelector('[id^="rel-desc-editor-"]');
+                                const acEditor = editDiv.querySelector('[id^="rel-ac-editor-"]');
+                                if (descEditor) {
+                                    descEditor.innerHTML = original.desc === '(None)' ? '' : original.desc;
+                                }
+                                if (acEditor) {
+                                    acEditor.innerHTML = original.ac;
+                                }
                             }
                             viewDiv.style.display = 'block';
                             editDiv.style.display = 'none';
@@ -902,13 +1261,15 @@
                     // If in edit mode, get from inputs; else from view
                     if (content.querySelector('.related-story-edit').style.display === 'block') {
                         title = content.querySelector('.rel-title-input').value;
-                        description = content.querySelector('.rel-desc-input').value;
-                        ac = content.querySelector('.rel-ac-input').value;
+                        const descEditor = content.querySelector('[id^="rel-desc-editor-"]');
+                        const acEditor = content.querySelector('[id^="rel-ac-editor-"]');
+                        description = descEditor ? descEditor.innerHTML : '';
+                        ac = acEditor ? acEditor.innerHTML : '';
                     } else {
                         title = content.querySelector('.rel-title-text').textContent;
-                        // For description and AC, get the raw text (not HTML)
-                        description = content.querySelector('.rel-desc-text').innerText;
-                        ac = content.querySelector('.rel-ac-text').innerText === '(None)' ? '' : content.querySelector('.rel-ac-text').innerText;
+                        // For description and AC, get the HTML content (preserves tables)
+                        description = content.querySelector('.rel-desc-text').innerHTML === '(None)' ? '' : content.querySelector('.rel-desc-text').innerHTML;
+                        ac = content.querySelector('.rel-ac-text').innerHTML === '(None)' ? '' : content.querySelector('.rel-ac-text').innerHTML;
                     }
                     selectedRelated.push({
                         title: title,
