@@ -298,10 +298,14 @@ def call_ai_provider(ai_provider, prompt, images=None, gemini_api_key=None, clau
             try:
                 print(f"DEBUG: Trying Claude model: {model_name}")
                 # Use higher max_tokens for test case generation (can be large JSON arrays)
+                # Positive test cases now have no limits, so use highest limit
                 # Edge cases tend to generate more test cases, so use even higher limit
                 is_test_case = 'test case' in str(prompt).lower() or 'json array' in str(prompt).lower()
+                is_positive = 'positive' in str(prompt).lower() and is_test_case
                 is_edge_case = 'edge case' in str(prompt).lower()
-                if is_edge_case:
+                if is_positive:
+                    max_tokens = 16384  # Highest limit for positive test cases (no limits on generation)
+                elif is_edge_case:
                     max_tokens = 16384  # Higher limit for edge cases which generate many test cases
                 elif is_test_case:
                     max_tokens = 8192  # Standard limit for other test case types
@@ -672,14 +676,20 @@ def _generate_cases_for_type(ai_provider, story_title, story_description, accept
         "Positive": """
 **Positive Test Case Guidelines:**
 - Verify the core functionality works as expected under normal conditions.
-- Cover all acceptance criteria with positive test cases - create test cases for each acceptance criterion, prioritizing the most important scenarios.
-- Test key valid input scenarios from the data dictionary - prioritize critical fields and common use cases rather than exhaustive combinations.
-- Generate test cases for important valid combinations of inputs - focus on realistic, high-value scenarios.
-- Include test cases for all successful workflows and happy paths - prioritize critical user journeys.
-- **Pagination (for lists):** Generate positive test cases for key pagination scenarios (first/last pages, navigation controls) - prioritize the most important scenarios.
-- **Boundary Values (for numeric fields):** Generate positive test cases for valid boundary values (minimum, maximum, zero if allowed) - focus on critical fields.
-- **Generate 3-12 positive test cases** for most stories, focusing on core functionality and critical paths.
-- **IMPORTANT: Do not artificially limit the number of test cases. If the story has multiple acceptance criteria, workflows, or data dictionary fields, generate test cases to cover them all. Generate enough test cases to provide comprehensive coverage of all acceptance criteria and key scenarios.**
+- **CRITICAL: Generate comprehensive positive test cases with NO LIMIT based on the user story requirements.**
+- **Cover ALL acceptance criteria:** Create separate positive test cases for EACH acceptance criterion. If there are 10 acceptance criteria, generate at least 10 positive test cases (one per criterion, plus additional test cases for variations and workflows).
+- **Cover ALL valid scenarios:** Generate test cases for ALL valid input scenarios from the data dictionary - create separate test cases for each valid field, valid combination, and valid workflow.
+- **Cover ALL successful workflows:** Include test cases for ALL successful workflows and happy paths described in the user story title, description, and acceptance criteria.
+- **Pagination (for lists):** Generate positive test cases for ALL pagination scenarios (first page, last page, middle pages, navigation controls, page size variations) - create separate test cases for each scenario.
+- **Boundary Values (for numeric fields):** Generate positive test cases for ALL valid boundary values (minimum, maximum, zero if allowed, just within limits) - create separate test cases for each boundary value.
+- **NO ARTIFICIAL LIMITS:** Do NOT limit the number of positive test cases. Generate as many test cases as needed to comprehensively cover:
+  * Every acceptance criterion (at least one test case per criterion, often more)
+  * Every valid input scenario from the data dictionary
+  * Every successful workflow and happy path
+  * Every valid combination of inputs that is meaningful
+  * Every valid boundary value for numeric fields
+  * Every pagination scenario for lists
+- **Comprehensive Coverage Principle:** The goal is to ensure that every aspect of the user story (title, description, acceptance criteria) is covered by positive test cases. Generate enough test cases to provide complete coverage without any artificial constraints.
 - **Title Examples:** "[Positive] User successfully creates account with valid information", "[Positive] System saves data when all required fields are completed", "[Positive] Pagination controls work correctly when navigating to page 2", "[Positive] System accepts minimum value (0) for quantity field".""",
         "Negative": """
 **Negative Test Case Guidelines:**
@@ -823,16 +833,20 @@ If images are included with the user story, please analyze them carefully and re
 1. **Descriptive Titles:** Create specific, action-oriented titles that clearly describe what functionality is being tested. Avoid generic titles like "Test login" - instead use "User can successfully login with valid email and password".
 2. **Consistency First:** For any '{case_type}' test, the `title`, `description`, and `expectedResult` must all be consistent with that scenario. For example, a 'Negative' test's title must describe a failure condition, and its expected result must describe the correct error handling.
 3. **Single Condition:** Each test case must focus on verifying exactly ONE condition or scenario. Do not combine multiple test conditions.
-4. **Balanced Test Coverage:** Generate an appropriate number of test cases based on story complexity:
-   - **For simple stories (1-3 acceptance criteria, few fields):** Generate 3-8 test cases per type (Positive/Negative/Edge Case/Data Flow)
-   - **For medium stories (4-7 acceptance criteria, moderate fields):** Generate 5-12 test cases per type
-   - **For complex stories (8+ acceptance criteria, many fields/workflows):** Generate 8-20 test cases per type
-   - **Prioritize critical scenarios:** Focus on high-priority test cases that verify core functionality and critical paths first
-   - **Cover all acceptance criteria:** Create test cases for each acceptance criterion, but consolidate similar scenarios when they test the same underlying functionality
-   - **Data dictionary coverage:** Generate test cases for key valid/invalid scenarios from the data dictionary, prioritizing the most important fields and validation rules
-   - **Edge cases:** Include the most critical boundary conditions and error scenarios, but avoid generating excessive test cases for minor variations
-   - **Avoid over-generation:** Do not create separate test cases for every minor variation - consolidate similar scenarios that test the same core functionality
-   - **Quality over quantity:** Generate fewer, well-designed test cases that provide meaningful coverage rather than many redundant test cases
+4. **Test Coverage Guidelines:**
+   - **FOR POSITIVE TEST CASES:** Generate comprehensive test cases with NO LIMIT. Create separate test cases for:
+     * Each acceptance criterion (at least one per criterion, often more for variations)
+     * Each valid input scenario from the data dictionary
+     * Each successful workflow and happy path
+     * Each valid combination of inputs
+     * Each valid boundary value for numeric fields
+     * Each pagination scenario for lists
+     * Do NOT consolidate or limit positive test cases - comprehensive coverage is the priority
+   - **FOR OTHER TEST TYPES (Negative/Edge Case/Data Flow):** Generate an appropriate number based on story complexity:
+     * **For simple stories (1-3 acceptance criteria, few fields):** Generate 3-8 test cases per type
+     * **For medium stories (4-7 acceptance criteria, moderate fields):** Generate 5-12 test cases per type
+     * **For complex stories (8+ acceptance criteria, many fields/workflows):** Generate 8-20 test cases per type
+     * Prioritize critical scenarios and consolidate similar scenarios when they test the same underlying functionality
 
 5. **Pagination Testing (for Lists):**
    - For LISTS (user lists, product lists, search results, reports, dashboards), generate test cases for key scenarios: first/last pages, empty lists, single-page scenarios, and critical boundary conditions. Prioritize the most important pagination scenarios (typically 2-4 test cases) rather than exhaustive coverage of every possible pagination variation.
@@ -874,17 +888,29 @@ Each test case in the JSON array must have the following fields:
 Now, generate ONLY the `{case_type}` test cases based on all these instructions.
 
 **IMPORTANT: Generate appropriate test coverage:**
-- Generate a reasonable number of test cases proportional to the story complexity (see guidelines above)
-- Prioritize critical scenarios and core functionality over minor variations
-- Create separate test cases for distinct scenarios, but consolidate similar scenarios that test the same underlying functionality
-- Each acceptance criterion should have test cases, but focus on the most important aspects rather than exhaustive coverage
-- For data dictionary entries, prioritize key fields and critical validation rules rather than testing every possible combination
-- Generate test cases for important workflows, critical error scenarios, and significant boundary conditions
-- The goal is balanced, meaningful test coverage - avoid both minimal sets and excessive over-generation
-- Do not generate duplicate test cases. Each test case must be unique in its condition, steps, and expected result.
-- If the story is simple, generate fewer test cases. If complex, generate more, but always stay within reasonable bounds (typically 5-15 test cases per type for most stories).
-- **CRITICAL: Do not artificially limit test cases. Generate enough test cases to comprehensively cover all acceptance criteria, key workflows, and important scenarios. If you have 5 acceptance criteria, generate at least 5-8 positive test cases. If you have 10 acceptance criteria, generate 10-15 positive test cases. Ensure each acceptance criterion is covered by at least one positive test case.**
-- **FOR NEGATIVE TEST CASES SPECIFICALLY: You MUST generate at least 3 negative test cases. If you cannot identify explicit validation rules, generate negative test cases for common failure scenarios such as: missing required inputs, invalid data formats, empty/null values, invalid user actions, or system error conditions. Never return an empty array for negative test cases.**
+- **FOR POSITIVE TEST CASES - NO LIMITS:**
+  * Generate comprehensive positive test cases with NO ARTIFICIAL LIMITS
+  * Create AT LEAST one positive test case for EACH acceptance criterion
+  * Generate separate positive test cases for EACH valid input scenario from the data dictionary
+  * Generate separate positive test cases for EACH successful workflow and happy path
+  * Generate separate positive test cases for EACH valid combination of inputs
+  * Generate separate positive test cases for EACH valid boundary value (minimum, maximum, zero if allowed, etc.)
+  * Generate separate positive test cases for EACH pagination scenario (first page, last page, navigation, etc.)
+  * If there are 5 acceptance criteria, generate at least 5 positive test cases (one per criterion) plus additional test cases for variations and workflows
+  * If there are 10 acceptance criteria, generate at least 10 positive test cases (one per criterion) plus additional test cases for variations and workflows
+  * If there are 20 acceptance criteria, generate at least 20 positive test cases (one per criterion) plus additional test cases for variations and workflows
+  * Do NOT consolidate similar positive test cases - each unique scenario should have its own test case
+  * Do NOT limit the number of positive test cases - comprehensive coverage is the priority
+  * The goal is to ensure every aspect of the user story (title, description, acceptance criteria) is thoroughly covered by positive test cases
+- **FOR OTHER TEST TYPES (Negative/Edge Case/Data Flow):**
+  * Generate a reasonable number of test cases proportional to the story complexity
+  * Prioritize critical scenarios and core functionality
+  * Create separate test cases for distinct scenarios, but consolidate similar scenarios that test the same underlying functionality
+  * Focus on the most important aspects rather than exhaustive coverage
+  * The goal is balanced, meaningful test coverage
+- **GENERAL RULES:**
+  * Do not generate duplicate test cases. Each test case must be unique in its condition, steps, and expected result.
+  * **FOR NEGATIVE TEST CASES SPECIFICALLY: You MUST generate at least 3 negative test cases. If you cannot identify explicit validation rules, generate negative test cases for common failure scenarios such as: missing required inputs, invalid data formats, empty/null values, invalid user actions, or system error conditions. Never return an empty array for negative test cases.**
 
 **CRITICAL: You MUST return ONLY a valid JSON array. Do not include any explanatory text, markdown formatting, or code blocks. Return ONLY the JSON array starting with [ and ending with ].**
 """
@@ -1348,17 +1374,7 @@ def upload_test_cases():
             final_title = tc.get('title', '').strip()
             description_raw = tc.get('description', '')
             expected_result_raw = tc.get('expectedResult', '')
-            # 4. Map text priority to integer value
-            priority_input = tc.get('priority', 'Medium')
-            priority_text = str(priority_input).lower().strip()
-            priority_map = {
-                'critical': 1, '1': 1,
-                'high': 2, '2': 2,
-                'medium': 3, '3': 3,
-                'low': 4, '4': 4
-            }
-            priority_value = priority_map.get(priority_text, 3) # Default to Medium (3)
-            # 5. Format the Test Case Steps into XML
+            # Format the Test Case Steps into XML
             steps_list = []
             if isinstance(description_raw, list):
                 steps_list = description_raw
@@ -1401,19 +1417,59 @@ def upload_test_cases():
             # 6. Create the Test Case Work Item patch document
             patch_document = [
                 {"op": "add", "path": "/fields/System.Title", "value": final_title},
-                {"op": "add", "path": "/fields/Microsoft.VSTS.Common.Priority", "value": priority_value},
+                {"op": "add", "path": "/fields/Microsoft.VSTS.Common.Priority", "value": 1},  # Always set Priority to 1
+                {"op": "add", "path": "/fields/System.State", "value": "Ready"},  # Set State to Ready
             ]
             # Only add the steps field if we have some steps to add.
             if steps_xml:
                 patch_document.append(
                     {"op": "add", "path": "/fields/Microsoft.VSTS.TCM.Steps", "value": steps_xml}
                 )
-            created_work_item = work_item_tracking_client.create_work_item(
-                document=patch_document,
-                project=azure_devops_project_name,
-                type="Test Case"
-            )
-            created_test_case_ids.append(created_work_item.id)
+            try:
+                # Try to create with State field
+                created_work_item = work_item_tracking_client.create_work_item(
+                    document=patch_document,
+                    project=azure_devops_project_name,
+                    type="Test Case"
+                )
+                created_test_case_ids.append(created_work_item.id)
+            except Exception as create_error:
+                # If creation fails due to State field, try creating without state first, then update
+                error_str = str(create_error)
+                if "State" in error_str and ("not in the list of supported values" in error_str or "not supported" in error_str.lower()):
+                    # Remove State from patch and try again
+                    patch_document_without_state = [patch for patch in patch_document if patch.get("path") != "/fields/System.State"]
+                    
+                    try:
+                        created_work_item = work_item_tracking_client.create_work_item(
+                            document=patch_document_without_state,
+                            project=azure_devops_project_name,
+                            type="Test Case"
+                        )
+                        test_case_id = created_work_item.id
+                        
+                        # Now try to update the state separately
+                        try:
+                            update_patch = [
+                                {"op": "add", "path": "/fields/System.State", "value": "Ready"}
+                            ]
+                            work_item_tracking_client.update_work_item(
+                                document=update_patch,
+                                id=test_case_id,
+                                project=azure_devops_project_name,
+                                validate_only=False
+                            )
+                        except Exception as state_error:
+                            # If state update fails, log but don't fail the whole operation
+                            print(f"WARNING: Failed to set state to Ready for test case {test_case_id}: {state_error}")
+                        
+                        created_test_case_ids.append(test_case_id)
+                    except Exception as retry_error:
+                        # If retry also fails, raise the original error
+                        raise create_error
+                else:
+                    # If it's a different error, raise it
+                    raise create_error
 
         # 2. Add Test Cases to Test Suite
         test_cases_to_add = [{"workItem": {"id": tc_id}} for tc_id in created_test_case_ids]

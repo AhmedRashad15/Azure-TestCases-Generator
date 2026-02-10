@@ -2,14 +2,16 @@ import React, { useState } from "react";
 import StoryFetcher from "./StoryFetcher";
 import StoryAnalysis from "./StoryAnalysis";
 import TestCaseGenerator from "./TestCaseGenerator";
+import TestExecution from "./TestExecution";
 import RichTextEditor from "./RichTextEditor";
-import { WorkItem } from "../services/azureDevOpsService";
+import { WorkItem, TestCase } from "../services/azureDevOpsService";
 import "./../styles/index.css";
 
 const App: React.FC = () => {
   const [storyData, setStoryData] = useState<WorkItem | null>(null);
   const [currentWorkItemId, setCurrentWorkItemId] = useState<string>("");
   const [editableAcceptanceCriteria, setEditableAcceptanceCriteria] = useState<string>("");
+  const [generatedTestCases, setGeneratedTestCases] = useState<TestCase[]>([]);
 
   const handleStoryFetched = (story: WorkItem) => {
     setStoryData(story);
@@ -142,8 +144,20 @@ const App: React.FC = () => {
             <TestCaseGenerator
               storyData={storyData}
               workItemId={currentWorkItemId}
+              onTestCasesGenerated={setGeneratedTestCases}
             />
           </div>
+
+          {generatedTestCases.length > 0 && (
+            <div className="card">
+              <h2>4. Execute Test Cases & Create Bugs</h2>
+              <TestExecution
+                testCases={generatedTestCases}
+                userStoryId={currentWorkItemId}
+                userStoryTitle={storyData.title}
+              />
+            </div>
+          )}
         </>
       )}
     </div>

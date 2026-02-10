@@ -460,7 +460,12 @@ class AzureDevOpsService {
         {
           op: "add",
           path: "/fields/Microsoft.VSTS.Common.Priority",
-          value: this.priorityToNumber(testCase.priority),
+          value: 1, // Always set Priority to 1
+        },
+        {
+          op: "add",
+          path: "/fields/System.State",
+          value: "Ready", // Set State to Ready
         },
       ];
 
@@ -477,7 +482,7 @@ class AzureDevOpsService {
       }
 
       // Create test case work item
-      const createResponse = await fetch(
+      let createResponse = await fetch(
         `${baseUrl}/${encodeURIComponent(projectName)}/_apis/wit/workitems/$Test Case?api-version=7.1`,
         {
           method: "PATCH",
@@ -489,12 +494,67 @@ class AzureDevOpsService {
         }
       );
 
+      // If creation fails due to state field, try creating without state first, then update
       if (!createResponse.ok) {
-        throw new Error(`Failed to create test case: ${createResponse.statusText}`);
-      }
+        const errorText = await createResponse.text();
+        // Check if error is related to State field
+        if (errorText.includes("State") && errorText.includes("not in the list of supported values")) {
+          // Remove State from patch and try again
+          const workItemPatchWithoutState = workItemPatch.filter(
+            (patch) => patch.path !== "/fields/System.State"
+          );
+          
+          createResponse = await fetch(
+            `${baseUrl}/${encodeURIComponent(projectName)}/_apis/wit/workitems/$Test Case?api-version=7.1`,
+            {
+              method: "PATCH",
+              headers: {
+                Authorization: `Bearer ${accessToken}`,
+                "Content-Type": "application/json-patch+json",
+              },
+              body: JSON.stringify(workItemPatchWithoutState),
+            }
+          );
 
-      const createdItem = await createResponse.json();
-      testCaseIds.push(createdItem.id);
+          if (!createResponse.ok) {
+            throw new Error(`Failed to create test case: ${createResponse.statusText}`);
+          }
+
+          const createdItem = await createResponse.json();
+          const testCaseId = createdItem.id;
+          
+          // Now try to update the state separately
+          try {
+            await fetch(
+              `${baseUrl}/${encodeURIComponent(projectName)}/_apis/wit/workitems/${testCaseId}?api-version=7.1`,
+              {
+                method: "PATCH",
+                headers: {
+                  Authorization: `Bearer ${accessToken}`,
+                  "Content-Type": "application/json-patch+json",
+                },
+                body: JSON.stringify([
+                  {
+                    op: "add",
+                    path: "/fields/System.State",
+                    value: "Ready",
+                  },
+                ]),
+              }
+            );
+          } catch (stateError) {
+            // If state update fails, log but don't fail the whole operation
+            console.warn(`Failed to set state to Ready for test case ${testCaseId}:`, stateError);
+          }
+          
+          testCaseIds.push(testCaseId);
+        } else {
+          throw new Error(`Failed to create test case: ${createResponse.statusText}`);
+        }
+      } else {
+        const createdItem = await createResponse.json();
+        testCaseIds.push(createdItem.id);
+      }
     }
 
     // Add test cases to test suite
@@ -559,6 +619,165 @@ class AzureDevOpsService {
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&apos;");
+  }
+
+  async createBugsFromFailedTestCases(
+    failedTestCases: Array<{
+      testCase: TestCase;
+      actualResult: string;
+      screenshots: Array<{ id: string; dataUrl: string; name: string }>;
+    }>,
+    userStoryId: string,
+    userStoryTitle: string
+  ): Promise<number[]> {
+    const { orgUrl, projectName } = await this.getOrgUrlAndProject();
+
+    if (!orgUrl || !projectName) {
+      throw new Error("Unable to get organization URL or project name");
+    }
+
+    const baseUrl = orgUrl.endsWith("/") ? orgUrl.slice(0, -1) : orgUrl;
+    const accessToken = await SDK.getAccessToken();
+    const createdBugIds: number[] = [];
+
+    for (const failedCase of failedTestCases) {
+      const { testCase, actualResult, screenshots } = failedCase;
+
+      // Build bug description with test case info and actual result
+      let bugDescription = `<h3>Test Case: ${this.escapeXml(testCase.title)}</h3>`;
+      bugDescription += `<p><strong>Test Case ID:</strong> ${testCase.id || "N/A"}</p>`;
+      bugDescription += `<p><strong>Steps:</strong></p><p>${this.escapeXml(testCase.description || "")}</p>`;
+      bugDescription += `<p><strong>Expected Result:</strong></p><p>${this.escapeXml(testCase.expectedResult || "")}</p>`;
+      bugDescription += `<p><strong>Actual Result:</strong></p><p>${this.escapeXml(actualResult)}</p>`;
+      bugDescription += `<p><strong>Related User Story:</strong> <a href="${baseUrl}/${encodeURIComponent(projectName)}/_workitems/edit/${userStoryId}">${this.escapeXml(userStoryTitle)}</a></p>`;
+
+      // Add screenshots to description
+      if (screenshots.length > 0) {
+        bugDescription += `<h3>Screenshots:</h3>`;
+        screenshots.forEach((screenshot, index) => {
+          bugDescription += `<p><strong>Screenshot ${index + 1}:</strong> ${this.escapeXml(screenshot.name)}</p>`;
+          bugDescription += `<img src="${screenshot.dataUrl}" alt="${this.escapeXml(screenshot.name)}" style="max-width: 800px;" />`;
+        });
+      }
+
+      // Create bug work item
+      const workItemPatch = [
+        {
+          op: "add",
+          path: "/fields/System.Title",
+          value: `Bug: ${testCase.title}`,
+        },
+        {
+          op: "add",
+          path: "/fields/System.Description",
+          value: bugDescription,
+        },
+        {
+          op: "add",
+          path: "/fields/Microsoft.VSTS.Common.Priority",
+          value: this.priorityToNumber(testCase.priority),
+        },
+        {
+          op: "add",
+          path: "/fields/Microsoft.VSTS.Common.Severity",
+          value: "2 - High", // Default to High severity
+        },
+        {
+          op: "add",
+          path: "/relations/-",
+          value: {
+            rel: "System.LinkTypes.Related",
+            url: `${baseUrl}/${encodeURIComponent(projectName)}/_apis/wit/workitems/${userStoryId}`,
+          },
+        },
+      ];
+
+      try {
+        const createResponse = await fetch(
+          `${baseUrl}/${encodeURIComponent(projectName)}/_apis/wit/workitems/$Bug?api-version=7.1`,
+          {
+            method: "PATCH",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json-patch+json",
+            },
+            body: JSON.stringify(workItemPatch),
+          }
+        );
+
+        if (!createResponse.ok) {
+          const errorText = await createResponse.text();
+          throw new Error(`Failed to create bug: ${createResponse.statusText} - ${errorText}`);
+        }
+
+        const createdBug = await createResponse.json();
+        createdBugIds.push(createdBug.id);
+
+        // Attach screenshots as attachments to the bug
+        if (screenshots.length > 0) {
+          for (const screenshot of screenshots) {
+            try {
+              // Convert data URL to blob
+              const response = await fetch(screenshot.dataUrl);
+              const blob = await response.blob();
+
+              // Upload attachment
+              const formData = new FormData();
+              formData.append("file", blob, screenshot.name);
+
+              const uploadResponse = await fetch(
+                `${baseUrl}/${encodeURIComponent(projectName)}/_apis/wit/attachments?fileName=${encodeURIComponent(screenshot.name)}&api-version=7.1`,
+                {
+                  method: "POST",
+                  headers: {
+                    Authorization: `Bearer ${accessToken}`,
+                  },
+                  body: blob,
+                }
+              );
+
+              if (uploadResponse.ok) {
+                const attachment = await uploadResponse.json();
+                // Attach the file to the bug
+                const attachPatch = [
+                  {
+                    op: "add",
+                    path: "/relations/-",
+                    value: {
+                      rel: "AttachedFile",
+                      url: attachment.url,
+                      attributes: {
+                        name: screenshot.name,
+                      },
+                    },
+                  },
+                ];
+
+                await fetch(
+                  `${baseUrl}/${encodeURIComponent(projectName)}/_apis/wit/workitems/${createdBug.id}?api-version=7.1`,
+                  {
+                    method: "PATCH",
+                    headers: {
+                      Authorization: `Bearer ${accessToken}`,
+                      "Content-Type": "application/json-patch+json",
+                    },
+                    body: JSON.stringify(attachPatch),
+                  }
+                );
+              }
+            } catch (attachError) {
+              console.error(`Failed to attach screenshot ${screenshot.name}:`, attachError);
+              // Continue with other screenshots even if one fails
+            }
+          }
+        }
+      } catch (error) {
+        console.error(`Failed to create bug for test case ${testCase.id}:`, error);
+        throw error;
+      }
+    }
+
+    return createdBugIds;
   }
 }
 

@@ -6,6 +6,7 @@ import RichTextEditor from "./RichTextEditor";
 interface TestCaseGeneratorProps {
   storyData: WorkItem;
   workItemId: string;
+  onTestCasesGenerated?: (testCases: TestCase[]) => void;
 }
 
 const TestCaseGenerator: React.FC<TestCaseGeneratorProps> = ({

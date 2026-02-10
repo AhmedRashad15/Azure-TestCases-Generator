@@ -832,10 +832,21 @@ def _generate_cases_for_type(ai_provider, story_title, story_description, accept
         "Positive": """
 **Positive Test Case Guidelines:**
 - Verify the core functionality works as expected under normal conditions.
-- Cover all acceptance criteria with at least one positive test case - generate enough test cases to cover each acceptance criterion comprehensively.
-- Test each valid input scenario from the data dictionary separately.
-- **IMPORTANT: Do not artificially limit the number of test cases. Generate enough test cases to provide comprehensive coverage of all acceptance criteria and key scenarios. If you have multiple acceptance criteria, generate test cases for each one.**
-- **Title Examples:** "[Positive] User successfully creates account with valid information", "[Positive] System saves data when all required fields are completed".""",
+- **CRITICAL: Generate comprehensive positive test cases with NO LIMIT based on the user story requirements.**
+- **Cover ALL acceptance criteria:** Create separate positive test cases for EACH acceptance criterion. If there are 10 acceptance criteria, generate at least 10 positive test cases (one per criterion, plus additional test cases for variations and workflows).
+- **Cover ALL valid scenarios:** Generate test cases for ALL valid input scenarios from the data dictionary - create separate test cases for each valid field, valid combination, and valid workflow.
+- **Cover ALL successful workflows:** Include test cases for ALL successful workflows and happy paths described in the user story title, description, and acceptance criteria.
+- **Pagination (for lists):** Generate positive test cases for ALL pagination scenarios (first page, last page, middle pages, navigation controls, page size variations) - create separate test cases for each scenario.
+- **Boundary Values (for numeric fields):** Generate positive test cases for ALL valid boundary values (minimum, maximum, zero if allowed, just within limits) - create separate test cases for each boundary value.
+- **NO ARTIFICIAL LIMITS:** Do NOT limit the number of positive test cases. Generate as many test cases as needed to comprehensively cover:
+  * Every acceptance criterion (at least one test case per criterion, often more)
+  * Every valid input scenario from the data dictionary
+  * Every successful workflow and happy path
+  * Every valid combination of inputs that is meaningful
+  * Every valid boundary value for numeric fields
+  * Every pagination scenario for lists
+- **Comprehensive Coverage Principle:** The goal is to ensure that every aspect of the user story (title, description, acceptance criteria) is covered by positive test cases. Generate enough test cases to provide complete coverage without any artificial constraints.
+- **Title Examples:** "[Positive] User successfully creates account with valid information", "[Positive] System saves data when all required fields are completed", "[Positive] Pagination controls work correctly when navigating to page 2", "[Positive] System accepts minimum value (0) for quantity field".""",
         "Negative": """
 **Negative Test Case Guidelines:**
 - **CRITICAL: You MUST ALWAYS generate negative test cases, even for simple stories. Every user story has potential failure scenarios that need to be tested.**
@@ -964,12 +975,19 @@ If images are included with the user story, please analyze them carefully and re
 1. **Descriptive Titles:** Create specific, action-oriented titles that clearly describe what functionality is being tested. Avoid generic titles like "Test login" - instead use "User can successfully login with valid email and password".
 2. **Consistency First:** For any '{case_type}' test, the `title`, `description`, and `expectedResult` must all be consistent with that scenario. For example, a 'Negative' test's title must describe a failure condition, and its expected result must describe the correct error handling.
 3. **Single Condition:** Each test case must focus on verifying exactly ONE condition or scenario. Do not combine multiple test conditions.
-4. **Ambiguity Coverage:** When ambiguities exist, create test cases that help clarify them through testing. However, follow these guidelines:
-   - **Limit:** Maximum 2-3 test cases per identified ambiguity
-   - **Prioritize:** Focus on critical contradictions and high-impact ambiguities first
-   - **Consolidate:** Merge similar test cases rather than creating duplicates
-   - **Quality:** Generate fewer, high-quality test cases rather than many redundant ones
-   - **Testability:** Only generate test cases for ambiguities that can actually be verified through testing
+4. **Test Coverage Guidelines:**
+   - **FOR POSITIVE TEST CASES:** Generate comprehensive test cases with NO LIMIT. Create separate test cases for:
+     * Each acceptance criterion (at least one per criterion, often more for variations)
+     * Each valid input scenario from the data dictionary
+     * Each successful workflow and happy path
+     * Each valid combination of inputs
+     * Each valid boundary value for numeric fields
+     * Each pagination scenario for lists
+     * Do NOT consolidate or limit positive test cases - comprehensive coverage is the priority
+   - **FOR OTHER TEST TYPES (Negative/Edge Case/Data Flow):** Generate an appropriate number based on story complexity and prioritize critical scenarios
+   - **Ambiguity Coverage (for all test types):** When ambiguities exist, create test cases that help clarify them through testing:
+     * **For Positive test cases:** Generate separate test cases for each interpretation without limits
+     * **For other test types:** Focus on critical contradictions and high-impact ambiguities, consolidate similar scenarios
 
 **Mobile Application Guidelines (Apply if context is a mobile app):**
 - If a scenario applies to both iOS and Android, write a single, consolidated test case.
@@ -1001,8 +1019,30 @@ Each test case in the JSON array must have the following fields:
 
 Now, generate ONLY the `{case_type}` test cases based on all these instructions.
 
-- Do not generate duplicate test cases. Each test case must be unique in its condition, steps, and expected result.
-- **FOR NEGATIVE TEST CASES SPECIFICALLY: You MUST generate at least 3 negative test cases. If you cannot identify explicit validation rules, generate negative test cases for common failure scenarios such as: missing required inputs, invalid data formats, empty/null values, invalid user actions, or system error conditions. Never return an empty array for negative test cases.**
+**IMPORTANT: Generate appropriate test coverage:**
+- **FOR POSITIVE TEST CASES - NO LIMITS:**
+  * Generate comprehensive positive test cases with NO ARTIFICIAL LIMITS
+  * Create AT LEAST one positive test case for EACH acceptance criterion
+  * Generate separate positive test cases for EACH valid input scenario from the data dictionary
+  * Generate separate positive test cases for EACH successful workflow and happy path
+  * Generate separate positive test cases for EACH valid combination of inputs
+  * Generate separate positive test cases for EACH valid boundary value (minimum, maximum, zero if allowed, etc.)
+  * Generate separate positive test cases for EACH pagination scenario (first page, last page, navigation, etc.)
+  * If there are 5 acceptance criteria, generate at least 5 positive test cases (one per criterion) plus additional test cases for variations and workflows
+  * If there are 10 acceptance criteria, generate at least 10 positive test cases (one per criterion) plus additional test cases for variations and workflows
+  * If there are 20 acceptance criteria, generate at least 20 positive test cases (one per criterion) plus additional test cases for variations and workflows
+  * Do NOT consolidate similar positive test cases - each unique scenario should have its own test case
+  * Do NOT limit the number of positive test cases - comprehensive coverage is the priority
+  * The goal is to ensure every aspect of the user story (title, description, acceptance criteria) is thoroughly covered by positive test cases
+- **FOR OTHER TEST TYPES (Negative/Edge Case/Data Flow):**
+  * Generate a reasonable number of test cases proportional to the story complexity
+  * Prioritize critical scenarios and core functionality
+  * Create separate test cases for distinct scenarios, but consolidate similar scenarios that test the same underlying functionality
+  * Focus on the most important aspects rather than exhaustive coverage
+  * The goal is balanced, meaningful test coverage
+- **GENERAL RULES:**
+  * Do not generate duplicate test cases. Each test case must be unique in its condition, steps, and expected result.
+  * **FOR NEGATIVE TEST CASES SPECIFICALLY: You MUST generate at least 3 negative test cases. If you cannot identify explicit validation rules, generate negative test cases for common failure scenarios such as: missing required inputs, invalid data formats, empty/null values, invalid user actions, or system error conditions. Never return an empty array for negative test cases.**
 
 **CRITICAL: You MUST return ONLY a valid JSON array. Do not include any explanatory text, markdown formatting, or code blocks. Return ONLY the JSON array starting with [ and ending with ].**
 """
