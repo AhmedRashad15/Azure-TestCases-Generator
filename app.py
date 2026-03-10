@@ -689,6 +689,10 @@ def _generate_cases_for_type(ai_provider, story_title, story_description, accept
   * Every valid combination of inputs that is meaningful
   * Every valid boundary value for numeric fields
   * Every pagination scenario for lists
+  * Every field in table-like or read-only detail/summary screens (one test case per field—see guideline 8)
+  * Every user-editable/input field (one test case per field for valid input—see guideline 9)
+- **Table/Field-based read-only screens:** If the story or images show a screen with a table or list of labeled fields (e.g. Policy Details with Policy Number, Status, Insurance Company, etc.) where data is read-only and retrieved from a source, create a **separate positive test case for each field** verifying that field's value is displayed/returned correctly according to context.
+- **User-editable/input fields:** If the story or images show a form or screen with fields the user can write in (e.g. email, phone, name, dropdowns, date pickers), create a **separate positive test case for each such input field** verifying that valid data can be entered and accepted/saved correctly for that field.
 - **Comprehensive Coverage Principle:** The goal is to ensure that every aspect of the user story (title, description, acceptance criteria) is covered by positive test cases. Generate enough test cases to provide complete coverage without any artificial constraints.
 - **Title Examples:** "[Positive] User successfully creates account with valid information", "[Positive] System saves data when all required fields are completed", "[Positive] Pagination controls work correctly when navigating to page 2", "[Positive] System accepts minimum value (0) for quantity field".""",
         "Negative": """
@@ -708,6 +712,7 @@ def _generate_cases_for_type(ai_provider, story_title, story_description, accept
 - **Boundary Value Violations (for numeric fields):** Generate negative test cases for critical invalid boundary values (below minimum, above maximum, negative if rejected) with expected error messages - prioritize important fields.
 - **Pagination Errors (for lists):** Generate negative test cases for key pagination failures (invalid page number, navigation beyond last page) with expected error messages - focus on common error scenarios.
 - **Generate 3-12 negative test cases** for most stories, focusing on critical validation rules and common error scenarios. **Minimum: Generate at least 3 negative test cases even for simple stories.**
+- **User-editable/input fields:** For forms or screens with input fields the user can write in, create **separate negative test cases per field** for validation failures (e.g. empty required field, invalid format, out of range), each with the expected error in expectedResult—see guideline 9.
 - **Title Examples:** "[Negative] System shows error when email field is empty", "[Negative] Application prevents login with invalid password format", "[Negative] System rejects value below minimum (-1) for age field", "[Negative] System handles invalid page number correctly".""",
         "Edge Case": """
 **Edge Case & Boundary Guidelines:**
@@ -837,6 +842,7 @@ If images are included with the user story, please analyze them carefully and re
    - **FOR POSITIVE TEST CASES:** Generate comprehensive test cases with NO LIMIT. Create separate test cases for:
      * Each acceptance criterion (at least one per criterion, often more for variations)
      * Each valid input scenario from the data dictionary
+     * Each user-editable/input field (at least one positive per field for valid input—see guideline 9)
      * Each successful workflow and happy path
      * Each valid combination of inputs
      * Each valid boundary value for numeric fields
@@ -856,6 +862,21 @@ If images are included with the user story, please analyze them carefully and re
 
 7. **Error Messages for Invalid Values:**
    - For invalid field inputs, generate separate negative test cases verifying appropriate error messages are displayed. Each invalid scenario (empty fields, wrong format, wrong type, out of range, boundary violations) should have its own test case with the expected error message specified in the expectedResult field.
+
+8. **Table or Field-Based Read-Only Screens (Detail/Summary Views):**
+   - **Detection:** If the story, acceptance criteria, or provided images describe or show a screen that displays data as a table, a list of labeled fields (label + value pairs), or a read-only detail/summary view (e.g. Policy Details, Customer Info, entity details with fields like Policy Number, Status, Status Date, Insurance Company, etc.), treat it as a field-based display.
+   - **Rule:** For such screens where data is **read-only** and **retrieved** from a source (e.g. policy details, API, database), generate a **separate test case for each field** that appears in that view.
+   - **Per-field test cases:** Each test case must verify that **one specific field** is displayed (or returned) correctly according to context. For example: "Policy Number is displayed with the correct value from the policy"; "Status shows the correct policy status"; "Policy Effective Date is shown in the expected format."
+   - **Do not consolidate:** Do NOT combine multiple fields into one test case. Each field gets its own test case for clear traceability and failure isolation.
+   - **Context in expected result:** In `expectedResult`, state that the value for that field matches the context (e.g. "Policy Number value matches the retrieved policy data"; "Insured Location is displayed correctly for the policy").
+
+9. **User-Editable / Input Fields (Fields the User Can Write In):**
+   - **Detection:** If the story, acceptance criteria, or images describe or show a form, screen, or section with **input fields** that the user can type or write in (e.g. text boxes, dropdowns the user selects, date pickers, numeric inputs, search fields, login/registration fields), treat these as editable/input fields.
+   - **Rule:** Generate **separate test cases for each such input field** where the field is material to the story. Do not combine multiple input fields into one test case when verifying valid input or validation behavior per field.
+   - **Positive (valid input):** For each input field, create at least one positive test case that verifies the user can enter valid data in that field and the system accepts or saves it correctly (e.g. "User can enter valid email in Email field and form accepts it"; "User can select a value in Status dropdown and selection is saved correctly").
+   - **Negative (validation):** For each input field that has validation rules (required, format, range, etc.), create separate negative test cases per field for invalid scenarios (e.g. empty required field, wrong format, out of range), each with the expected error message in expectedResult.
+   - **Per-field focus:** Each test case must target **one specific input field** for the condition being verified. This gives clear traceability and isolates which field failed.
+   - **Context in expected result:** In `expectedResult`, state the outcome for that specific field (e.g. "Email field accepts the value and form proceeds"; "Phone field displays the expected validation error when format is invalid").
 
 **Mobile Application Guidelines (Apply if context is a mobile app):**
 - If a scenario applies to both iOS and Android, write a single, consolidated test case.
@@ -896,6 +917,8 @@ Now, generate ONLY the `{case_type}` test cases based on all these instructions.
   * Generate separate positive test cases for EACH valid combination of inputs
   * Generate separate positive test cases for EACH valid boundary value (minimum, maximum, zero if allowed, etc.)
   * Generate separate positive test cases for EACH pagination scenario (first page, last page, navigation, etc.)
+  * For table-like or field-based read-only screens (e.g. Policy Details, entity detail views), generate separate positive test cases for EACH displayed field, each verifying that field's value is returned/displayed correctly according to context
+  * For forms or screens with user-editable/input fields (fields the user can write in), generate separate positive test cases for EACH such input field, each verifying that valid data can be entered in that field and accepted/saved correctly
   * If there are 5 acceptance criteria, generate at least 5 positive test cases (one per criterion) plus additional test cases for variations and workflows
   * If there are 10 acceptance criteria, generate at least 10 positive test cases (one per criterion) plus additional test cases for variations and workflows
   * If there are 20 acceptance criteria, generate at least 20 positive test cases (one per criterion) plus additional test cases for variations and workflows
@@ -1311,15 +1334,41 @@ def generate_test_cases_stream():
 @app.route('/upload_test_cases', methods=['POST'])
 def upload_test_cases():
     data = request.json or {}
+    print(f"DEBUG: Upload test cases request received. Data keys: {list(data.keys())}")
+    
     test_plan_id = data.get('test_plan_id')
     test_suite_id = data.get('test_suite_id')
     test_cases_str = data.get('test_cases')
     azure_devops_org_url = data.get('azure_devops_org_url')
     azure_devops_project_name = data.get('azure_devops_project_name')
     azure_devops_pat = data.get('azure_devops_pat')
+    
+    print(f"DEBUG: test_plan_id: {test_plan_id}, test_suite_id: {test_suite_id}")
+    print(f"DEBUG: azure_devops_org_url: {azure_devops_org_url[:50] if azure_devops_org_url else None}...")
+    print(f"DEBUG: azure_devops_project_name: {azure_devops_project_name}")
+    print(f"DEBUG: azure_devops_pat: {'***' if azure_devops_pat else None}")
+    print(f"DEBUG: test_cases_str length: {len(test_cases_str) if test_cases_str else 0}")
 
-    if not all([test_plan_id, test_suite_id, test_cases_str, azure_devops_org_url, azure_devops_project_name, azure_devops_pat]):
-        return jsonify({'error': 'All fields, including Azure DevOps details, are required.'}), 400
+    # Validate required fields and provide specific error messages
+    # Check for None, empty string, or whitespace-only strings
+    missing_fields = []
+    if not test_plan_id or (isinstance(test_plan_id, str) and not test_plan_id.strip()):
+        missing_fields.append('test_plan_id')
+    if not test_suite_id or (isinstance(test_suite_id, str) and not test_suite_id.strip()):
+        missing_fields.append('test_suite_id')
+    if not test_cases_str or (isinstance(test_cases_str, str) and not test_cases_str.strip()):
+        missing_fields.append('test_cases')
+    if not azure_devops_org_url or (isinstance(azure_devops_org_url, str) and not azure_devops_org_url.strip()):
+        missing_fields.append('azure_devops_org_url')
+    if not azure_devops_project_name or (isinstance(azure_devops_project_name, str) and not azure_devops_project_name.strip()):
+        missing_fields.append('azure_devops_project_name')
+    if not azure_devops_pat or (isinstance(azure_devops_pat, str) and not azure_devops_pat.strip()):
+        missing_fields.append('azure_devops_pat')
+    
+    if missing_fields:
+        return jsonify({
+            'error': f'Missing or empty required fields: {", ".join(missing_fields)}. Please ensure all fields are filled, including Azure DevOps details (Organization URL, Project Name, and PAT).'
+        }), 400
 
     try:
         test_cases = json.loads(test_cases_str or '[]')
