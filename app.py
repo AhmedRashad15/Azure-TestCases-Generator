@@ -632,6 +632,29 @@ def _detect_steps_in_acceptance_criteria(acceptance_criteria):
         normalized_steps.append(normalized_step)
     
     if len(normalized_steps) >= 1:  # At least 1 step to be considered a step list
+        # When there are multiple "blocks" (e.g. category list then procedural steps),
+        # prefer the block that looks like concrete procedural steps (Navigate, Login, Click, etc.)
+        procedural_verbs = re.compile(
+            r'\b(navigate|login|log in|click|select|enter|verify|check|open|close|submit|save|'
+            r'add|delete|create|observe|go to|access|fill|type|choose|press|expand|collapse)\b',
+            re.IGNORECASE
+        )
+        blocks = []
+        current_block = []
+        for step in normalized_steps:
+            m = re.match(r'^\s*(\d+)[\.\)\-]', step)
+            num = int(m.group(1)) if m else 0
+            if num == 1 and len(current_block) > 0:
+                blocks.append(current_block)
+                current_block = []
+            current_block.append(step)
+        if current_block:
+            blocks.append(current_block)
+        if len(blocks) > 1:
+            # Prefer block with most procedural verbs (user's actual test steps)
+            best = max(blocks, key=lambda b: sum(1 for s in b if procedural_verbs.search(s)))
+            normalized_steps = best
+            print(f"DEBUG: _detect_steps_in_acceptance_criteria: Multiple blocks found, using procedural block ({len(normalized_steps)} steps)")
         steps_text = '\n'.join(normalized_steps)
         print(f"DEBUG: _detect_steps_in_acceptance_criteria: Found {len(normalized_steps)} steps")
         return True, steps_text
@@ -661,12 +684,16 @@ def _generate_cases_for_type(ai_provider, story_title, story_description, accept
     if images:
         print(f"DEBUG: Including {len(images)} images in test case generation")
     
-    # Detect steps in acceptance criteria
+    # Detect steps in acceptance criteria, or in story description if none in acceptance criteria
     has_steps, steps_text = _detect_steps_in_acceptance_criteria(acceptance_criteria)
+    if not has_steps and story_description:
+        has_steps, steps_text = _detect_steps_in_acceptance_criteria(story_description)
+        if has_steps:
+            print(f"DEBUG: Detected steps in story description (none in acceptance criteria). Steps found: {len(steps_text.split('\n'))}")
     steps_text_escaped = ""
     if has_steps:
         step_count = len(steps_text.split('\n'))
-        print(f"DEBUG: Detected steps in acceptance criteria. Steps found: {step_count}")
+        print(f"DEBUG: Detected steps in acceptance criteria/description. Steps found: {step_count}")
         print(f"DEBUG: Steps content (first 500 chars): {steps_text[:500]}")
         # Escape the steps text for use in f-string
         steps_text_escaped = steps_text.replace('{', '{{').replace('}', '}}')
@@ -793,31 +820,44 @@ When generating test cases, pay special attention to any ambiguities, contradict
     steps_section = ""
     if has_steps:
         steps_section = f"""
-**CRITICAL: STEPS DETECTED IN ACCEPTANCE CRITERIA - MUST BE INCLUDED:**
-The acceptance criteria contains explicit steps provided by the user. These steps MUST ALWAYS be included in every test case description. Follow these requirements:
+**CRITICAL: USER-PROVIDED STEPS ARE THE MANDATORY BEGINNING — THEN ADD STEPS TO REACH THE EXPECTED RESULT:**
+The user has provided initial/setup steps. Every test case `description` MUST start with these steps exactly, then you MUST add further steps so the test case actually reaches and demonstrates the scenario in the title and expected result.
 
-1. **ALWAYS START WITH PROVIDED STEPS:** The steps from the acceptance criteria MUST be used as the INITIAL steps in every test case description. Do NOT skip, ignore, or replace these steps.
+1. **ALWAYS START WITH THE PROVIDED STEPS:** The steps in the box below MUST appear first in every test case description, in the same order and wording. Do not skip, reword, or reorder them.
 
-2. **Preserve Step Order and Content:** 
-   - Use the provided steps EXACTLY as they appear, maintaining their original order
-   - Keep the same numbering format (1., 2., 3., etc.)
-   - Preserve the exact wording and details from the provided steps
-   - These are the user's required initial steps and must appear first
+2. **THEN ADD STEPS TO COMPLETE THE SCENARIO:** After the provided steps, you MUST add additional steps that:
+   - Complete the specific scenario described in the test case **title** (e.g. for "[Negative] System prevents saving when end value is smaller than start value" add steps like: Select 'Multiple Values', create/enter a range with start and end values where end < start, attempt to save, then verify error).
+   - Lead to the **expected result** so a tester can follow the full sequence and verify the outcome.
+   - Are concrete actions (e.g. "Select 'Multiple Values'", "Enter start value 1000 and end value 2000 for first range", "For second range enter start 3000 and end 500", "Click Save or confirm", "Verify the system displays an error and does not save"). Do not add vague or category-only steps.
 
-3. **Complete the Workflow:** After including ALL the provided steps, ADD additional steps to complete the test case workflow based on the test case type ({case_type}):
-   - For **Positive** test cases: Add steps showing successful completion after the provided steps
-   - For **Negative** test cases: Add steps showing where validation fails or errors occur (after the provided steps)
-   - For **Edge Case** test cases: Add steps showing boundary conditions or unusual scenarios (after the provided steps)
-   - For **Data Flow** test cases: Add steps tracing data through the system (after the provided steps)
+3. **FORBIDDEN:** Do NOT add a separate list of "topic" or "category" steps (e.g. "Range Creation", "Validation Rules", "Editing Behavior" as standalone items). Only add concrete procedural steps that continue from the user's steps and lead to the expected result.
 
-4. **Step Formatting:** Format all steps as numbered steps (e.g., "1. Step one\\n2. Step two\\n3. Step three"). The provided steps should be numbered starting from 1, and your additional steps should continue the numbering sequence.
+4. **Numbering:** Number all steps in one sequence (1., 2., 3., ...). The provided steps keep their numbers; your added steps continue the numbering (e.g. if user provided 4 steps, your first added step is 5., then 6., etc.).
 
-5. **Steps from Acceptance Criteria (MUST BE INCLUDED AS INITIAL STEPS):**
+5. **Steps provided by user (MUST appear first, then add more steps to reach the expected result):**
 {steps_text_escaped}
 
-**CRITICAL REQUIREMENT:** Every test case description MUST begin with these exact steps in this exact order. Then, add additional steps to complete the test scenario. Never omit, skip, or replace the provided steps - they are mandatory initial steps that must appear in every test case.
+**SUMMARY:** description = [user's steps above, unchanged] + [your added steps that complete the scenario and lead to the expected result for this test case]. Each test case must be executable end-to-end; the added steps are required so the tester can reach and verify the expected result.
+"""
+    else:
+        # No steps provided by user: generate steps according to each test case title and context
+        steps_section = f"""
+**GENERATE STEPS ACCORDING TO EACH TEST CASE TITLE AND CONTEXT:**
+The user has not provided explicit steps. You MUST generate appropriate steps for each test case. The steps in the `description` field must be **specific to that test case** and aligned with its **title** and **type** ({case_type}).
 
-**VALIDATION CHECK:** Before returning your JSON response, verify that each test case's `description` field starts with the provided steps. If any test case description does not begin with the provided steps, you must fix it. The provided steps are non-negotiable and must be the foundation of every test case description.
+1. **Title-driven steps:** For each test case, generate steps that directly support and demonstrate the scenario described in the **title**. The steps should be concrete, actionable, and in logical order (e.g. navigate, perform action, verify result). Do not use generic or recycled steps—each test case's steps must match its title.
+
+2. **Context from user story:** Use the user story title, description, acceptance criteria, and data dictionary to infer the correct flow (screens, actions, data). Steps should reference real elements from the story (e.g. page names, field names, actions like "Click on Add", "Select Multiple Values", "Enter valid email").
+
+3. **By test type:**
+   - **Positive:** Steps that lead to the successful outcome (e.g. navigate to screen, enter valid data, submit, verify success message or correct display).
+   - **Negative:** Steps that lead to the failure scenario (e.g. navigate to screen, leave field empty or enter invalid data, submit, verify error message).
+   - **Edge Case:** Steps that set up the boundary or special condition, then verify behavior (e.g. enter max length, or trigger the edge scenario, then verify).
+   - **Data Flow:** Steps that trace data through the flow (e.g. enter data in form, save, navigate away, return, verify data persisted or flowed correctly).
+
+4. **Format:** Number steps (1., 2., 3., ...). Each step should be one clear action or verification. Typically 3–8 steps per test case depending on complexity.
+
+5. **Consistency:** The `description` (steps) and `expectedResult` must align with the test case `title`. A reader should see the title and then the steps and understand exactly what is being tested.
 """
 
     prompt = f"""
@@ -897,7 +937,7 @@ Each test case in the JSON array must have the following fields:
   * Use action-oriented language that describes the expected behavior
   * Examples: "[Positive] User can successfully login with valid credentials", "[Negative] System displays error when required field is empty", "[Edge Case] Application handles maximum character limit in text field"
 - `priority`: "High", "Medium", or "Low".
-- `description`: A numbered list of steps, e.g., "1. Step one.\\n2. Step two.". **CRITICAL: If steps were provided in acceptance criteria, you MUST start the description with those exact steps first, then add additional steps to complete the test scenario.**
+- `description`: A numbered list of steps, e.g., "1. Step one.\\n2. Step two.". **If the user provided steps:** start with those steps exactly, then add more steps that complete the scenario and lead to the expected result (so the full sequence is executable). **If the user did NOT provide steps:** generate steps that match the context of each test case's title—concrete, actionable steps that demonstrate the scenario and align with the test type.
 - `expectedResult`: A specific and verifiable outcome.
 
 **ID Naming Convention:**
