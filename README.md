@@ -1,12 +1,22 @@
-# Test Genius Project
+# Test Genius Project (Azure Test Cases Generator)
 
-A web app to generate and upload Azure DevOps test cases using Gemini AI.
+Web app and tooling to generate and upload Azure DevOps test cases using AI. Repository: [Azure-TestCases-Generator](https://github.com/AhmedRashad15/Azure-TestCases-Generator).
 
 ## Features
-- Generate test cases for a user story using Gemini AI
-- Include related user stories for better coverage
-- Edit and review test cases before upload
-- Upload test cases directly to Azure DevOps Test Plans
+
+- **AI providers:** Google Gemini and Anthropic Claude (select in the UI)
+- **Test case types:** Positive, Negative, Edge Case, and Data Flow
+- **Related user stories:** Optional context for broader coverage
+- **Ambiguity-aware generation:** Extra coverage when acceptance criteria are unclear or contradictory
+- **Smart step handling:**
+  - If you **provide numbered steps** in acceptance criteria or the story description, those steps are used as the **mandatory start** of every generated test case. The model then **adds further concrete steps** so each test case reaches its **title** and **expected result** (no vague “category” steps such as “Range Creation” only).
+  - If the story mixes a **topic list** with a **procedural list** (e.g. headings then “Navigate…”, “Login…”), the engine prefers the **procedural block** when building the shared starting steps.
+  - If you **do not** provide steps, steps are generated **per test case** from the title, story context, and test type.
+- **Coverage prompts:** Separate test cases for read-only detail/table fields (e.g. policy details) and for user-editable form fields (valid input and validation)
+- **Edit and review** generated test cases before upload
+- **Upload** to Azure DevOps Test Plans (Test Plan ID and Suite ID)
+
+An **Azure DevOps extension** lives under `extension/`; see [extension/README.md](extension/README.md) for build and packaging steps.
 
 ## Prerequisites
 
@@ -174,10 +184,16 @@ python -m pip install -r requirements.txt
   ```
 
 ## Usage
-1. Enter your Azure DevOps details and User Story ID.
-2. Fetch the user story and select any related stories to include.
-3. Generate test cases, review/edit as needed.
-4. Enter your Test Plan and Suite IDs, then upload test cases to Azure DevOps.
+
+1. Enter your Azure DevOps organization URL, PAT, and User Story ID.
+2. Fetch the user story and optionally select related stories.
+3. Optionally add a **Data Dictionary** and choose **Gemini** or **Claude**.
+4. Click **Generate Test Cases**; review or edit titles, steps, and expected results.
+5. Enter **Test Plan ID** and **Test Suite ID**, then upload to Azure DevOps.
+
+**Tip:** Put your shared **setup steps** (e.g. open environment, login, navigate to screen) in acceptance criteria or description as a numbered list. Generated cases will reuse them first, then add scenario-specific steps.
+
+After changing `app.py` or prompts, **restart** the Flask server so updates apply.
 
 ## Deployment
 - Push your changes to GitHub:
@@ -252,10 +268,11 @@ Sometimes older Python versions have certificate issues:
 - For issues, open a GitHub issue or contact the maintainer.
 
 ## Technologies Used
+
 - Python, Flask
-- Google Gemini API
-- Azure DevOps Python SDK
-- HTML/CSS/JS (frontend)
+- Google Gemini API, Anthropic Claude API
+- Azure DevOps REST / Python SDK
+- HTML/CSS/JS (web UI); React extension under `extension/`
 
 ## Contact
 For questions or support, open an issue or contact [Ahmed Rashad](mailto:ahmedmohamed255106@gmail.com).
