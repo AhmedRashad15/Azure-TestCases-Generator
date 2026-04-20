@@ -500,166 +500,83 @@ def analyze_story():
         if related_test_cases:
             test_cases_section = f"\n\n**RELATED TEST CASES (if available):**\n{related_test_cases}"
         
-        prompt = f"""You are an experienced software analyst and product owner assistant.
+        prompt = f"""**Role:** You are a Senior Expert Quality Control (QC) Engineer mentoring a team of testers.
 
-Your task is to review the following user story (and related test cases if available) and produce a simple, actionable, and UI-ready output for the development team.
+**Objective:** Take the provided User Story and break it down so thoroughly and clearly that a QC Engineer can trust your explanation 100%. Your output must be the "single source of truth." The tester should **not need to read the original Azure ticket** to understand exactly what needs to be tested, why it matters, and how it works.
 
-**USER STORY:**
+**Analytical Directives:**
+1. **Translate for QC:** Do not just parrot the product owner's text. Explain the feature's workflow, business value, and mechanics specifically through the lens of testing.
+2. **Deconstruct Functionality:** Identify the explicit happy paths and core business logic step-by-step.
+3. **Hunt for Edge Cases (Negative Testing):** Think critically about boundary values, invalid inputs, timeouts, concurrent user actions, and error handling. What happens when things go wrong? Feed findings into section 3 (Edge Cases & Risks).
+4. **Evaluate Automation Readiness:** Assess if the acceptance criteria are deterministic enough for automated testing scripts. Are there predictable states, clear setup/teardown requirements, and explicit data needs? Mention gaps in section 3 or 4 as appropriate.
+5. **Non-Functional Requirements (NFRs):** Look for missing performance, security, UI/UX consistency, or accessibility constraints.
+
+**User Story to Analyze:**
 **Title:** {story_title}
 **Description:** {desc_text}
 **Acceptance Criteria:** {ac_text}
 {test_cases_section}
 
-**IMPORTANT ANALYSIS INSTRUCTIONS:**
-
-1. **Acceptance Criteria Analysis:**
-   - Review EACH individual rule, requirement, and condition stated in the acceptance criteria
-   - Break down each acceptance criterion into its component parts
-   - Check for completeness: Does each rule have enough detail to implement?
-   - Check for testability: Can each rule be verified with clear pass/fail criteria?
-   - Check for conflicts: Are there any contradictory requirements?
-   - Check for missing information: What data, validation rules, error messages, or edge cases are not specified?
-
-2. **Image Analysis (if images are provided):**
-   - Carefully examine ALL images included with this user story
-   - Analyze visual elements: UI components, layouts, workflows, diagrams, screenshots
-   - Compare images with text requirements: Do images match what's described in text?
-   - Identify visual ambiguities: 
-     * Are there UI elements shown in images that aren't mentioned in acceptance criteria?
-     * Are there visual states (hover, focus, error) not defined in text?
-     * Are there design specifications (colors, sizes, spacing) visible but not documented?
-     * Are there workflow steps shown visually that aren't explicitly stated?
-   - Check for discrepancies: Do images contradict the written acceptance criteria?
-   - Note missing visuals: Are critical UI states, error cases, or edge scenarios not shown in images?
-
-3. **Cross-Reference Check:**
-   - Compare images with acceptance criteria rules
-   - Ensure every visible element in images has corresponding acceptance criteria
-   - Ensure every acceptance criteria rule is reflected (if applicable) in images
-
-Please analyze and respond using the structure below.
-
----
-
-### 🟦 1. User Story Summary
-Provide a short, simple summary (2–3 sentences) describing the purpose of the user story.  
-If related stories exist, mention their connection briefly.
-
----
-
-### 🟩 2. Key Functional Points
-List the main actions, goals, or behaviors that this user story describes.  
-Keep these as **short, clear bullet points**.
-
----
-
-### 🟨 3. Ambiguities & Clarification Questions
-**CRITICAL: You must thoroughly analyze EACH acceptance criteria rule AND ALL provided images.**
-
-**Ambiguity Detection Strategy:**
-Review the following user story and identify any ambiguous or unclear parts that could cause confusion during testing or implementation.
-
-Highlight vague terms, missing details, or assumptions that are not explicitly stated.
-
-Focus on unclear acceptance criteria, incomplete conditions, or subjective words that could be interpreted in multiple ways.
-
-**SPECIFICALLY LOOK FOR CONTRADICTIONS AND LOGICAL INCONSISTENCIES:**
-- **Contradictory statements within the same rule:** Does the rule say one thing but then contradict itself in parentheses, notes, or additional clauses?
-- **Status/state contradictions:** Does the rule mention a status change (e.g., "status will be approved") but then state that no approval is needed? This is a logical contradiction.
-- **Parenthetical contradictions:** Pay special attention to text in parentheses, brackets, or notes that contradicts the main statement (e.g., "status will be approved (No need to be approved)").
-- **Workflow inconsistencies:** Does the described workflow or process contradict the expected outcome or status?
-- **Permission/role contradictions:** Does the rule assign permissions or roles that conflict with the described action or status?
-- **Conditional logic conflicts:** Are there "if-then" statements where the condition and outcome don't logically align?
-
-Provide each ambiguous point as a short, clear statement.
-
-For each ambiguity found, provide:
-- **Ambiguity:** Clear description of what's unclear, missing, or contradictory (specifically highlight contradictions if found)
-- **Question:** Specific question to ask the Product Owner to clarify this
-
-Analyze:
-- Every acceptance criteria rule individually for completeness, clarity, AND internal consistency
-- **Contradictions:** Compare the main statement with any parenthetical notes, brackets, or additional clauses in the SAME rule
-- **Status changes:** Verify that status changes align with the described process (e.g., if status becomes "approved", ensure the process actually involves approval)
-- **Logical flow:** Check if the described workflow logically leads to the stated outcome
-- All images for visual elements not documented in text
-- Any discrepancies between images and written requirements
-- Missing information in acceptance criteria that images reveal
-- UI states, validations, error handling, edge cases not explicitly stated
-- Vague terms, missing details, or assumptions that are not explicitly stated
-- Subjective words that could be interpreted in multiple ways
-- Incomplete conditions or unclear requirements
-
-**Example of contradiction to catch:**
-- Rule: "The modifications are done by the user who has permission to edit or approve, and the status will be approved (No need to be approved by anyone in this stage)"
-- **Ambiguity:** The rule states the status will be "approved" but then contradicts this by saying "No need to be approved by anyone". If no approval is needed, why does the status become "approved"?
-- **Question:** Should the status be "approved" automatically without approval, or should it be a different status (e.g., "completed", "submitted") that doesn't imply approval?
-
-Keep this section clear and easy to read — one ambiguity and one question per bullet point.
-
----
-
-### 🟧 4. Recommendations
-Provide 2–4 short, actionable suggestions to make the story clearer, more complete, or easier to test.
-
----
+**Additional analysis (apply throughout all sections):**
+- Review EACH acceptance criteria rule for completeness, testability, conflicts, and missing data/validation/error handling.
+- **Contradictions:** Flag contradictory statements within the same rule (including text in parentheses or notes that contradict the main statement), status/workflow inconsistencies, and permission conflicts. Capture these in section 4 with **Ambiguity:** and **Question:**.
+- **Images (if provided):** Examine all images; compare UI to text; note elements, states, or workflows in images not documented in acceptance criteria; flag discrepancies. Reference images in Edge Cases, Risks, or Ambiguities as relevant.
+- If related test cases were provided, briefly tie them into section 1 or 2 where they clarify scope.
 
 ### 🎨 UI Rendering Guidelines
-Return your final output formatted as **HTML** (not markdown), following these visual and structural rules:
-
+Return your final output formatted strictly as **HTML** (not markdown), following these visual and structural rules:
 - Each section should be wrapped in a `<div>` with a unique color-coded header:
-  - **1. Summary:** Blue header (`#0078D7`)
+  - **1. Story Explanation for QC:** Blue header (`#0078D7`)
   - **2. Key Functional Points:** Green header (`#28a745`)
-  - **3. Ambiguities & Questions:** Yellow header (`#ffc107`)
-  - **4. Recommendations:** Orange header (`#fd7e14`)
+  - **3. Edge Cases & Risks:** Red header (`#dc3545`)
+  - **4. Ambiguities & Clarification Questions:** Yellow header (`#ffc107`)
 - Headers must have **bold white text**, padding (8px), and rounded corners.
-- Each bullet point should use:
-  - **Bold labels** (like "Ambiguity:" / "Question:")
-  - Alternating font colors for readability:
-    - Header text: white
-    - Content text: dark gray (`#333`)
-    - Key terms/questions: navy blue (`#004080`)
-- Wrap all sections inside a main `<div class="review-container">` with:
-  - Light background (`#f9f9f9`)
-  - Padding: 15px
-  - Border-radius: 8px
-  - Small shadow for readability
-- Use semantic HTML: `<h2>` for headers, `<ul>` and `<li>` for lists, `<b>` for key labels.
-- Keep the text short and easy to scan — avoid long paragraphs.
+- Each bullet point should use **Bold labels** (like **Ambiguity:** / **Risk:** / **Question:** / **Scenario:**).
+- Alternating font colors: header text white; content dark gray (`#333`); key terms/questions navy blue (`#004080`) via `<span class="navy-text">` where helpful.
+- Wrap all sections inside a main `<div class="review-container">` with light background (`#f9f9f9`), padding 15px, border-radius 8px, small shadow.
+- Use semantic HTML: `<h2>`, `<ul>`, `<li>`, and `<p>`, plus `<b>` for key labels.
+- Keep the text short, sharp, and easy to scan — avoid long paragraphs.
+- Do NOT include type labels or priority banners in the body (e.g. "HIGH PRIORITY"); use only the four sections above.
 
-Here is the preferred HTML structure template (use this for formatting your response):
+Here is the preferred HTML structure template (use this exact formatting; include the `<style>` block inside `review-container`):
 
-```html
 <div class="review-container">
-  <h2 class="header blue">1. User Story Summary</h2>
-  <p>This story allows users to reset their password using an email link...</p>
+  <style>
+    .header {{ padding: 8px; border-radius: 4px; color: white; font-weight: bold; margin-bottom: 10px; }}
+    .blue {{ background-color: #0078D7; }}
+    .green {{ background-color: #28a745; }}
+    .red {{ background-color: #dc3545; }}
+    .yellow {{ background-color: #ffc107; color: #333; }}
+    .review-container {{ background-color: #f9f9f9; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); font-family: sans-serif; color: #333; line-height: 1.5; }}
+    .navy-text {{ color: #004080; }}
+  </style>
+
+  <h2 class="header blue">1. Story Explanation for QC</h2>
+  <p><b>Context & Goal:</b> [Explain the business reason for this feature so the tester understands the "why".]</p>
+  <p><b>How it Works:</b> [Explain the technical/UI workflow clearly so the tester knows exactly what to look for, replacing the need to read the Azure ticket.]</p>
 
   <h2 class="header green">2. Key Functional Points</h2>
   <ul>
-    <li><b>Reset Password:</b> User can trigger password reset via email.</li>
-    <li><b>Validation:</b> Check if the email exists before sending reset link.</li>
+    <li><b>[Feature/Step]:</b> Brief description of the expected behavior for test case creation.</li>
   </ul>
 
-  <h2 class="header yellow">3. Ambiguities & Clarification Questions</h2>
+  <h2 class="header red">3. Edge Cases & Risks</h2>
   <ul>
-    <li><b>Ambiguity:</b> No email content defined.<br>
-        <b>Question:</b> What should the reset email include?</li>
-    <li><b>Ambiguity:</b> No mention of link expiration.<br>
-        <b>Question:</b> How long should the reset link remain valid?</li>
-    <li><b>Ambiguity:</b> Image shows a "Cancel" button that is not mentioned in acceptance criteria.<br>
-        <b>Question:</b> Should users be able to cancel the password reset process?</li>
+    <li><b>Risk:</b> Potential system failure point or boundary issue.<br>
+        <b>Scenario:</b> <span class="navy-text">What happens if [condition] occurs?</span></li>
   </ul>
 
-  <h2 class="header orange">4. Recommendations</h2>
+  <h2 class="header yellow">4. Ambiguities & Clarification Questions</h2>
   <ul>
-    <li>Add acceptance criteria for email content and expiration time.</li>
+    <li><b>Ambiguity:</b> Missing detail in AC or design that blocks testing.<br>
+        <b>Question:</b> <span class="navy-text">Specific question to ask the PO/Dev before signing off on test readiness.</span></li>
   </ul>
 </div>
-```
 
-**IMPORTANT:** 
-- Return ONLY the HTML code, starting with `<div class="review-container">` and ending with `</div>`.
-- Do NOT include markdown formatting, code blocks with triple backticks, or any text outside the HTML structure.
+**IMPORTANT:**
+- Return ONLY the HTML code, starting with `<div class="review-container">` and ending with `</div>` (the closing tag of the outermost review-container).
+- Do NOT wrap your response in markdown code fences (triple backticks) and do not add any text outside the HTML structure.
+- Replace the bracketed placeholders in section 1 with real paragraphs derived from the user story; do not leave "[Explain...]" as literal text in your output.
 - Make sure all HTML is properly formatted and ready to be inserted directly into a webpage.
 
 **IMAGES PROVIDED:**
@@ -669,7 +586,7 @@ Here is the preferred HTML structure template (use this for formatting your resp
 3. Identify any visual elements, UI states, or design specifications shown in images that are NOT documented in the acceptance criteria
 4. Note any discrepancies between images and written requirements
 5. Flag missing visual documentation (error states, edge cases, different screen sizes, etc.)
-6. Reference specific images when identifying ambiguities (e.g., "In Image 1, there is a [element] that is not mentioned in acceptance criteria...")
+6. Reference specific images when identifying risks or ambiguities (e.g., "In Image 1, there is a [element] that is not mentioned in acceptance criteria...")
 """
         
         print(f"DEBUG: Calling {provider_name} API for analysis...")
@@ -707,6 +624,66 @@ Here is the preferred HTML structure template (use this for formatting your resp
         print(f"Error generating analysis: {e}")
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
+
+def _ac_step_body(line):
+    return re.sub(r'^\s*\d+[\.\)\-]\s*', '', (line or '').strip()).strip()
+
+
+def _ac_line_looks_like_test_step(line):
+    """True if a line is likely a real UI or data-setup step, not a template heading (e.g. filter names only)."""
+    body = _ac_step_body(line)
+    if not body:
+        return False
+    procedural = re.compile(
+        r'\b(navigate|login|log in|click|select|enter|verify|check|open|close|submit|save|'
+        r'add|delete|create|observe|go to|access|fill|type|choose|press|expand|collapse|'
+        r'generate|call|use|set|update|backdate|prepare|insert|configure|ensure|execute|apply|'
+        r'load|wait|confirm|tap|swipe|apply filter|search)\b',
+        re.IGNORECASE,
+    )
+    data_setup = re.compile(
+        r'\b(api|database|db\b|sql|endpoint|backdate|fixture|invoke|graphql|stored procedure|'
+        r'postman|swagger|seed)\b',
+        re.IGNORECASE,
+    )
+    if procedural.search(body):
+        return True
+    if data_setup.search(body):
+        return True
+    if len(body) >= 95:
+        return True
+    return False
+
+
+def _strip_leading_non_actionable_ac_steps(normalized_steps):
+    out = list(normalized_steps or [])
+    while out and not _ac_line_looks_like_test_step(out[0]):
+        out.pop(0)
+    return out
+
+
+def _normalize_generated_test_case(tc):
+    """Merge optional preConditions into description for a single textarea / Azure steps."""
+    if not isinstance(tc, dict):
+        return tc
+    pre = tc.get('preConditions') or tc.get('preconditions')
+    if isinstance(pre, list):
+        pre = '\n'.join(str(x).strip() for x in pre if isinstance(x, str) and x.strip())
+    pre = (pre or '').strip() if isinstance(pre, str) else ''
+    if not pre:
+        return tc
+    desc = tc.get('description', '')
+    if isinstance(desc, list):
+        desc = '\n'.join(str(x) for x in desc)
+    desc = (desc or '').strip()
+    merged = 'Pre-conditions (Data Setup):\n' + pre
+    if desc:
+        merged += '\n\nDescription (Main Steps):\n' + desc
+    tc['description'] = merged.strip()
+    tc.pop('preConditions', None)
+    tc.pop('preconditions', None)
+    return tc
+
 
 def _detect_steps_in_acceptance_criteria(acceptance_criteria):
     """Detect if acceptance criteria contains numbered steps or bullet points
@@ -772,12 +749,10 @@ def _detect_steps_in_acceptance_criteria(acceptance_criteria):
     # Also check for steps that might be anywhere in the text (not just sequential)
     # Especially if user mentioned "steps" in context
     if len(steps_found) == 0 or (mentions_steps and len(steps_found) < 2):
-        # Try to find any numbered steps anywhere in the text
+        # Try to find any numbered steps anywhere in the text (skip headings / labels)
         for line in lines:
             line_stripped = line.strip()
-            # Match numbered patterns including 1- format
-            if re.match(r'^\s*\d+[\.\)\-]\s*.+', line_stripped):
-                # Avoid duplicates
+            if re.match(r'^\s*\d+[\.\)\-]\s*.+', line_stripped) and _ac_line_looks_like_test_step(line_stripped):
                 if line_stripped not in steps_found:
                     steps_found.append(line_stripped)
     
@@ -787,8 +762,47 @@ def _detect_steps_in_acceptance_criteria(acceptance_criteria):
         # Convert "1-" format to "1." format for better AI understanding
         normalized_step = re.sub(r'^(\s*\d+)\-(\s*)', r'\1.\2', step)
         normalized_steps.append(normalized_step)
+
+    # Sequential scan often stops at a section heading before real UI steps are collected
+    if normalized_steps and not any(_ac_line_looks_like_test_step(s) for s in normalized_steps):
+        recovered = []
+        for line in lines:
+            line_stripped = line.strip()
+            if re.match(numbered_pattern, line_stripped) and _ac_line_looks_like_test_step(line_stripped):
+                normalized_step = re.sub(r'^(\s*\d+)\-(\s*)', r'\1.\2', line_stripped)
+                if normalized_step not in recovered:
+                    recovered.append(normalized_step)
+        if recovered:
+            normalized_steps = recovered
     
     if len(normalized_steps) >= 1:  # At least 1 step to be considered a step list
+        # When there are multiple "blocks" (e.g. category list then procedural steps),
+        # prefer the block that looks like concrete procedural steps (Navigate, Login, Click, etc.)
+        procedural_verbs = re.compile(
+            r'\b(navigate|login|log in|click|select|enter|verify|check|open|close|submit|save|'
+            r'add|delete|create|observe|go to|access|fill|type|choose|press|expand|collapse)\b',
+            re.IGNORECASE
+        )
+        blocks = []
+        current_block = []
+        for step in normalized_steps:
+            m = re.match(r'^\s*(\d+)[\.\)\-]', step)
+            num = int(m.group(1)) if m else 0
+            if num == 1 and len(current_block) > 0:
+                blocks.append(current_block)
+                current_block = []
+            current_block.append(step)
+        if current_block:
+            blocks.append(current_block)
+        if len(blocks) > 1:
+            # Prefer block with most procedural verbs (user's actual test steps)
+            best = max(blocks, key=lambda b: sum(1 for s in b if procedural_verbs.search(s)))
+            normalized_steps = best
+            print(f"DEBUG: _detect_steps_in_acceptance_criteria: Multiple blocks found, using procedural block ({len(normalized_steps)} steps)")
+        normalized_steps = _strip_leading_non_actionable_ac_steps(normalized_steps)
+        if not normalized_steps:
+            print(f"DEBUG: _detect_steps_in_acceptance_criteria: No actionable steps after filtering")
+            return False, ""
         steps_text = '\n'.join(normalized_steps)
         print(f"DEBUG: _detect_steps_in_acceptance_criteria: Found {len(normalized_steps)} steps")
         return True, steps_text
@@ -816,12 +830,16 @@ def _generate_cases_for_type(ai_provider, story_title, story_description, accept
     if images:
         print(f"DEBUG: Including {len(images)} images in test case generation")
     
-    # Detect steps in acceptance criteria
+    # Detect steps in acceptance criteria, or in story description if none in acceptance criteria
     has_steps, steps_text = _detect_steps_in_acceptance_criteria(acceptance_criteria)
+    if not has_steps and story_description:
+        has_steps, steps_text = _detect_steps_in_acceptance_criteria(story_description)
+        if has_steps:
+            print(f"DEBUG: Detected steps in story description (none in acceptance criteria). Steps found: {len(steps_text.splitlines())}")
     steps_text_escaped = ""
     if has_steps:
         step_count = len(steps_text.split('\n'))
-        print(f"DEBUG: Detected steps in acceptance criteria. Steps found: {step_count}")
+        print(f"DEBUG: Detected steps in acceptance criteria/description. Steps found: {step_count}")
         print(f"DEBUG: Steps content (first 500 chars): {steps_text[:500]}")
         # Escape the steps text for use in f-string
         steps_text_escaped = steps_text.replace('{', '{{').replace('}', '}}')
@@ -930,31 +948,35 @@ When generating test cases, pay special attention to any ambiguities, contradict
     steps_section = ""
     if has_steps:
         steps_section = f"""
-**CRITICAL: STEPS DETECTED IN ACCEPTANCE CRITERIA - MUST BE INCLUDED:**
-The acceptance criteria contains explicit steps provided by the user. These steps MUST ALWAYS be included in every test case description. Follow these requirements:
+**CRITICAL: USER-PROVIDED UI STEPS — MANDATORY BEGINNING OF `description`:**
+The steps below were detected as concrete user-provided steps. Every test case `description` MUST start with these steps exactly (same order and wording), then continue with more numbered steps until the scenario in the **title** and **expectedResult** is fully covered.
 
-1. **ALWAYS START WITH PROVIDED STEPS:** The steps from the acceptance criteria MUST be used as the INITIAL steps in every test case description. Do NOT skip, ignore, or replace these steps.
+1. **ALWAYS START WITH THE PROVIDED STEPS** in `description` (not in `preConditions`).
 
-2. **Preserve Step Order and Content:** 
-   - Use the provided steps EXACTLY as they appear, maintaining their original order
-   - Keep the same numbering format (1., 2., 3., etc.)
-   - Preserve the exact wording and details from the provided steps
-   - These are the user's required initial steps and must appear first
+2. **THEN ADD STEPS** that complete the specific test case (filters, search, assertions on screen). Do NOT add standalone filter names or section headings as steps.
 
-3. **Complete the Workflow:** After including ALL the provided steps, ADD additional steps to complete the test case workflow based on the test case type ({case_type}):
-   - For **Positive** test cases: Add steps showing successful completion after the provided steps
-   - For **Negative** test cases: Add steps showing where validation fails or errors occur (after the provided steps)
-   - For **Edge Case** test cases: Add steps showing boundary conditions or unusual scenarios (after the provided steps)
-   - For **Data Flow** test cases: Add steps tracing data through the system (after the provided steps)
+3. **FORBIDDEN:** Do NOT prepend lines like "Policy Expiry Range" or "Renewal Status" as standalone steps unless they are part of a full imperative sentence.
 
-4. **Step Formatting:** Format all steps as numbered steps (e.g., "1. Step one\\n2. Step two\\n3. Step three"). The provided steps should be numbered starting from 1, and your additional steps should continue the numbering sequence.
+4. **Numbering:** One continuous sequence (1., 2., …). Provided steps keep their numbers; your added steps continue.
 
-5. **Steps from Acceptance Criteria (MUST BE INCLUDED AS INITIAL STEPS):**
+5. **Steps provided by user (MUST appear first in `description`, then add more):**
 {steps_text_escaped}
 
-**CRITICAL REQUIREMENT:** Every test case description MUST begin with these exact steps in this exact order. Then, add additional steps to complete the test scenario. Never omit, skip, or replace the provided steps - they are mandatory initial steps that must appear in every test case.
+**VALIDATION CHECK:** Each test case's `description` must begin with the provided steps above, then additional actionable UI steps. Put data setup in `preConditions` when you use that field (see JSON format).
+"""
 
-**VALIDATION CHECK:** Before returning your JSON response, verify that each test case's `description` field starts with the provided steps. If any test case description does not begin with the provided steps, you must fix it. The provided steps are non-negotiable and must be the foundation of every test case description.
+    else:
+        steps_section = f"""
+**GENERATE STEPS ACCORDING TO EACH TEST CASE TITLE AND CONTEXT:**
+The user has not provided explicit mandatory steps. Generate appropriate steps for each test case. The `description` field must be **specific to that test case** and aligned with its **title** and **type** ({case_type}).
+
+1. **Title-driven steps:** Concrete, actionable steps in logical order. Do not use two-word labels or template headings as steps.
+
+2. **Context:** Use the user story title, description, acceptance criteria, and data dictionary.
+
+3. **Format:** Number steps (1., 2., 3., …). Typically 3–8 steps per test case.
+
+4. **Consistency:** `description`, `preConditions` (if any), and `expectedResult` must align with the `title`.
 """
 
     prompt = f"""
@@ -1008,8 +1030,9 @@ Each test case in the JSON array must have the following fields:
   * Use action-oriented language that describes the expected behavior
   * Examples: "[Positive] User can successfully login with valid credentials", "[Negative] System displays error when required field is empty", "[Edge Case] Application handles maximum character limit in text field"
 - `priority`: "High", "Medium", or "Low".
-- `description`: A numbered list of steps, e.g., "1. Step one.\\n2. Step two.". **CRITICAL: If steps were provided in acceptance criteria, you MUST start the description with those exact steps first, then add additional steps to complete the test scenario.**
-- `expectedResult`: A specific and verifiable outcome.
+- `description`: Numbered **main execution / UI steps only**. **If mandatory steps were detected above:** start `description` with those exact steps, then continue numbering. Otherwise generate steps from the test case **title**. Never use bare filter or column names as steps.
+- `preConditions` (optional string): When instructions distinguish data setup from UI steps, use a numbered list (2–4 lines) of how data is prepared **for this test case title** (flows, API/DB, dates). Omit if not applicable.
+- `expectedResult`: A specific and verifiable outcome (exact statuses, visibility vs hidden, or exact empty-state text when requested).
 
 **ID Naming Convention:**
 - Positive cases: `TC-POS-[number]`
@@ -1291,6 +1314,8 @@ def generate_test_cases_stream():
                             parsed_chunk = json.loads(json_text_chunk)
                             if isinstance(parsed_chunk, list):
                                 if parsed_chunk:
+                                    for _tc in parsed_chunk:
+                                        _normalize_generated_test_case(_tc)
                                     all_test_cases.extend(parsed_chunk)
                                     # Stream the current progress back to the client
                                     progress_data = {

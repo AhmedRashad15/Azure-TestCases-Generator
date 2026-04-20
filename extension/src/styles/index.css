@@ -174,6 +174,10 @@ button:disabled {
   background-color: #28a745;
 }
 
+.review-container h2.header.red {
+  background-color: #dc3545;
+}
+
 .review-container h2.header.yellow {
   background-color: #ffc107;
   color: #333;
@@ -207,6 +211,10 @@ button:disabled {
 .review-container b {
   color: #004080;
   font-weight: 600;
+}
+
+.review-container .navy-text {
+  color: #004080;
 }
 
 /* Test cases container */

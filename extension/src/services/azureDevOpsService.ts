@@ -432,6 +432,80 @@ class AzureDevOpsService {
     return doc.documentElement.innerHTML;
   }
 
+  /**
+   * Execute tab lists test points (case × configuration). New cases must include the same
+   * configuration assignments as the rest of the suite or they only appear under Define.
+   */
+  private async getSuitePointConfigurationIds(
+    baseUrl: string,
+    projectName: string,
+    accessToken: string,
+    planId: number,
+    suiteId: number
+  ): Promise<number[]> {
+    const enc = encodeURIComponent(projectName);
+    const headers = { Authorization: `Bearer ${accessToken}` };
+    const ordered: number[] = [];
+    const seen = new Set<number>();
+
+    const pointsUrls = [
+      `${baseUrl}/${enc}/_apis/testplan/Plans/${planId}/Suites/${suiteId}/points?api-version=7.1-preview.2`,
+      `${baseUrl}/${enc}/_apis/testplan/plans/${planId}/suites/${suiteId}/points?api-version=7.1-preview.2`,
+    ];
+    for (const url of pointsUrls) {
+      try {
+        const res = await fetch(url, { headers });
+        if (!res.ok) {
+          continue;
+        }
+        const data = (await res.json()) as
+          | Array<{ configuration?: { id?: number } }>
+          | { value?: Array<{ configuration?: { id?: number } }> };
+        const pointRows = Array.isArray(data) ? data : data.value || [];
+        for (const p of pointRows) {
+          const cid = p.configuration?.id;
+          if (typeof cid === "number" && !seen.has(cid)) {
+            seen.add(cid);
+            ordered.push(cid);
+          }
+        }
+        if (ordered.length > 0) {
+          return ordered;
+        }
+      } catch {
+        continue;
+      }
+    }
+
+    const suiteUrls = [
+      `${baseUrl}/${enc}/_apis/testplan/Plans/${planId}/Suites/${suiteId}?api-version=7.1-preview.1`,
+      `${baseUrl}/${enc}/_apis/testplan/plans/${planId}/suites/${suiteId}?api-version=7.1-preview.1`,
+    ];
+    for (const url of suiteUrls) {
+      try {
+        const res = await fetch(url, { headers });
+        if (!res.ok) {
+          continue;
+        }
+        const suite = (await res.json()) as { defaultConfigurations?: Array<{ id?: number }> };
+        for (const c of suite.defaultConfigurations || []) {
+          const cid = c.id;
+          if (typeof cid === "number" && !seen.has(cid)) {
+            seen.add(cid);
+            ordered.push(cid);
+          }
+        }
+        if (ordered.length > 0) {
+          return ordered;
+        }
+      } catch {
+        continue;
+      }
+    }
+
+    return ordered;
+  }
+
   async uploadTestCases(
     testCases: TestCase[],
     testPlanId: number,
@@ -557,7 +631,15 @@ class AzureDevOpsService {
       }
     }
 
-    // Add test cases to test suite
+    const configurationIds = await this.getSuitePointConfigurationIds(
+      baseUrl,
+      projectName,
+      accessToken,
+      testPlanId,
+      testSuiteId
+    );
+
+    // Add test cases to test suite (with configurations so Azure DevOps creates test points for Execute)
     const addToSuiteResponse = await fetch(
       `${baseUrl}/${encodeURIComponent(projectName)}/_apis/testplan/Plans/${testPlanId}/Suites/${testSuiteId}/TestCases?api-version=7.1-preview.2`,
       {
@@ -567,9 +649,16 @@ class AzureDevOpsService {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          suiteTestCases: testCaseIds.map((id) => ({
-            workItem: { id },
-          })),
+          suiteTestCases: testCaseIds.map((id) => {
+            const row: {
+              workItem: { id: number };
+              pointAssignments?: Array<{ configurationId: number }>;
+            } = { workItem: { id } };
+            if (configurationIds.length > 0) {
+              row.pointAssignments = configurationIds.map((configurationId) => ({ configurationId }));
+            }
+            return row;
+          }),
         }),
       }
     );

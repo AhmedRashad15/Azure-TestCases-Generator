@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import apiService from "../services/apiService";
 import azureDevOpsService, { WorkItem, TestCase } from "../services/azureDevOpsService";
 import RichTextEditor from "./RichTextEditor";
@@ -12,6 +12,7 @@ interface TestCaseGeneratorProps {
 const TestCaseGenerator: React.FC<TestCaseGeneratorProps> = ({
   storyData,
   workItemId,
+  onTestCasesGenerated,
 }) => {
   const [loading, setLoading] = useState(false);
   const [testCases, setTestCases] = useState<TestCase[]>([]);
@@ -23,6 +24,10 @@ const TestCaseGenerator: React.FC<TestCaseGeneratorProps> = ({
   const [uploading, setUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<string>("");
   const [aiProvider, setAiProvider] = useState<string>("gemini");
+
+  useEffect(() => {
+    onTestCasesGenerated?.(testCases);
+  }, [testCases, onTestCasesGenerated]);
 
   const handleGenerate = async () => {
     setLoading(true);
