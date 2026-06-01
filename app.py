@@ -1,8 +1,15 @@
 import os
 from flask import Flask, render_template, request, jsonify, Response
-from dotenv import load_dotenv
 import google.generativeai as genai
 import anthropic
+from ai_config import (
+    load_env,
+    get_anthropic_api_key,
+    get_claude_model,
+    get_claude_models,
+    is_claude_configured,
+    is_claude_billing_error,
+)
 from azure.devops.connection import Connection
 from azure.devops.v7_1.test_plan.models import (
     Configuration,
@@ -23,8 +30,8 @@ import requests
 from io import BytesIO
 from PIL import Image
 
-# Load environment variables from .env file
-load_dotenv()
+# Load .env and optional .env.local (same pattern as QC Next.js app)
+load_env()
 
 # --- Configure Gemini API ---
 # Create a .env file in your project root and add your Gemini API key:
@@ -37,14 +44,13 @@ if gemini_api_key:
 else:
     print("WARNING: GEMINI_API_KEY not found in .env file. Users can provide it via UI.")
 
-# --- Configure Claude API ---
-claude_api_key = os.getenv("CLAUDE_API_KEY")
+# --- Configure Claude API (ANTHROPIC_API_KEY or CLAUDE_API_KEY, server-only) ---
 claude_client = None
-if not claude_api_key:
-    print("WARNING: CLAUDE_API_KEY not found in .env file. Claude features will be unavailable.")
+if not is_claude_configured():
+    print("WARNING: ANTHROPIC_API_KEY / CLAUDE_API_KEY not found. Claude features will be unavailable.")
 else:
     try:
-        claude_client = anthropic.Anthropic(api_key=claude_api_key)
+        claude_client = anthropic.Anthropic(api_key=get_anthropic_api_key())
         print("DEBUG: Claude API client initialized successfully")
     except Exception as e:
         print(f"ERROR: Failed to initialize Claude API client: {e}")
@@ -242,7 +248,7 @@ def extract_images_from_html(html_content):
     
     return image_objects, text_content
 
-def call_ai_provider(ai_provider, prompt, images=None, gemini_api_key=None, claude_api_key=None):
+def call_ai_provider(ai_provider, prompt, images=None, gemini_api_key=None, claude_api_key=None, max_tokens=None):
     """
     Call either Gemini or Claude API based on provider selection.
     Returns the text response from the AI.
@@ -252,15 +258,18 @@ def call_ai_provider(ai_provider, prompt, images=None, gemini_api_key=None, clau
         prompt: The prompt text
         images: Optional list of PIL Image objects
         gemini_api_key: Optional Gemini API key (falls back to .env if not provided)
-        claude_api_key: Optional Claude API key (falls back to .env if not provided)
+        claude_api_key: Optional Claude API key (falls back to server env if not provided)
+        max_tokens: Optional Claude output cap (avoids mis-detecting from prompt text)
     """
     ai_provider = ai_provider.lower() if ai_provider else 'gemini'
     
     if ai_provider == 'claude':
         # Use provided key or fall back to environment variable
-        api_key = claude_api_key or os.getenv("CLAUDE_API_KEY")
+        api_key = (claude_api_key or "").strip() or get_anthropic_api_key()
         if not api_key:
-            raise ValueError("Claude API key is required. Please provide CLAUDE_API_KEY in .env file or via UI.")
+            raise ValueError(
+                "Claude API key is required. Set ANTHROPIC_API_KEY or CLAUDE_API_KEY in .env / .env.local."
+            )
         
         # Create Claude client with the API key
         try:
@@ -329,46 +338,34 @@ def call_ai_provider(ai_provider, prompt, images=None, gemini_api_key=None, clau
         # Create message with content array
         messages = [{"role": "user", "content": content}]
         
-        # Try different Claude models in order of preference
-        # Using latest available models (as of 2024-2025)
-        # Note: Older models may not be available, so we prioritize newer ones
-        claude_models = [
-            "claude-3-5-sonnet-20241022",  # Latest Sonnet 3.5 (most capable)
-            "claude-3-5-haiku-20241022",   # Latest Haiku 3.5 (faster, cheaper)
-            "claude-3-5-sonnet-20240620",  # Fallback to older Sonnet 3.5
-            "claude-3-opus-20240229",      # Opus 3.0 (if available)
-        ]
-        # Removed claude-3-sonnet-20240229 as it's deprecated and causing 404 errors
-        
+        claude_models = get_claude_models()
         last_error = None
         for model_name in claude_models:
             try:
                 print(f"DEBUG: Trying Claude model: {model_name}")
-                # Use higher max_tokens for test case generation (can be large JSON arrays)
-                # Positive test cases now have no limits, so use highest limit
-                # Edge cases tend to generate more test cases, so use even higher limit
-                is_test_case = 'test case' in str(prompt).lower() or 'json array' in str(prompt).lower()
-                is_positive = 'positive' in str(prompt).lower() and is_test_case
-                is_edge_case = 'edge case' in str(prompt).lower()
-                if is_positive:
-                    max_tokens = 16384  # Highest limit for positive test cases (no limits on generation)
-                elif is_edge_case:
-                    max_tokens = 16384  # Higher limit for edge cases which generate many test cases
-                elif is_test_case:
-                    max_tokens = 8192  # Standard limit for other test case types
+                if max_tokens is None:
+                    is_test_case = 'test case' in str(prompt).lower() or 'json array' in str(prompt).lower()
+                    is_positive = 'positive' in str(prompt).lower() and is_test_case
+                    is_edge_case = 'edge case' in str(prompt).lower()
+                    if is_positive or is_edge_case:
+                        token_limit = 16384
+                    elif is_test_case:
+                        token_limit = 8192
+                    else:
+                        token_limit = 4096
                 else:
-                    max_tokens = 4096  # Lower limit for non-test-case operations
-                print(f"DEBUG: Using max_tokens={max_tokens} for Claude API call")
+                    token_limit = max_tokens
+                print(f"DEBUG: Using max_tokens={token_limit} for Claude API call")
                 response = claude_client_instance.messages.create(
                     model=model_name,
-                    max_tokens=max_tokens,
+                    max_tokens=token_limit,
                     messages=messages
                 )
                 
                 # Check if response was truncated
                 stop_reason = getattr(response, 'stop_reason', None)
                 if stop_reason == 'max_tokens':
-                    print(f"WARNING: Claude response was truncated (hit max_tokens limit). Consider increasing max_tokens or simplifying the prompt.")
+                    print("WARNING: Claude response was truncated (hit max_tokens limit).")
                 
                 # Extract text from Claude response
                 if not hasattr(response, 'content') or not response.content:
@@ -397,13 +394,16 @@ def call_ai_provider(ai_provider, prompt, images=None, gemini_api_key=None, clau
                 import traceback
                 traceback.print_exc()
                 
-                # If it's a model not found error, try next model
+                if is_claude_billing_error(error_str):
+                    raise ValueError(
+                        "Anthropic API billing error for this key (credit balance / workspace). "
+                        "Use the same ANTHROPIC_API_KEY as your QC app, or create a new key in the correct workspace."
+                    )
                 if 'not_found_error' in error_str or '404' in error_str or 'model' in error_str.lower() or 'not found' in error_str.lower():
                     print(f"DEBUG: Model {model_name} not available, trying next model...")
                     continue
-                # If it's an authentication error, don't try other models
                 elif 'authentication' in error_str.lower() or '401' in error_str or '403' in error_str or 'api_key' in error_str.lower():
-                    raise ValueError(f"Claude API authentication error: {error_str}. Please check your CLAUDE_API_KEY.")
+                    raise ValueError(f"Claude API authentication error: {error_str}. Check ANTHROPIC_API_KEY / CLAUDE_API_KEY.")
                 # If it's a rate limit error, don't try other models
                 elif 'rate_limit' in error_str.lower() or '429' in error_str or 'quota' in error_str.lower():
                     raise ValueError(f"Claude API rate limit exceeded: {error_str}. Please try again later.")
@@ -422,8 +422,13 @@ def call_ai_provider(ai_provider, prompt, images=None, gemini_api_key=None, clau
             if 'not_found_error' in error_str.lower() or '404' in error_str or ('model' in error_str.lower() and 'not found' in error_str.lower()):
                 raise ValueError(f"None of the Claude models are available. The models may have been deprecated or your API key doesn't have access to them. Last error: {error_str}. Please check Anthropic's documentation for available models or contact support.")
             # Provide more specific error messages
+            elif is_claude_billing_error(error_str):
+                raise ValueError(
+                    "Anthropic API billing error for this key (credit balance / workspace). "
+                    "Use the same ANTHROPIC_API_KEY as your QC app, or create a new key in the correct workspace."
+                )
             elif 'authentication' in error_str.lower() or '401' in error_str or '403' in error_str or 'api_key' in error_str.lower():
-                raise ValueError(f"Claude API authentication failed: {error_str}. Please verify your CLAUDE_API_KEY is correct and has proper permissions.")
+                raise ValueError(f"Claude API authentication failed: {error_str}. Check ANTHROPIC_API_KEY / CLAUDE_API_KEY.")
             elif 'rate_limit' in error_str.lower() or '429' in error_str or 'quota' in error_str.lower():
                 raise ValueError(f"Claude API rate limit exceeded: {error_str}. Please wait a moment and try again, or check your API quota.")
             elif 'content_policy' in error_str.lower() or 'safety' in error_str.lower():
@@ -1903,7 +1908,8 @@ If images are included with the user story (either embedded in HTML or provided 
                 prompt, 
                 all_images if len(all_images) > 0 else None,
                 gemini_api_key=gemini_api_key,
-                claude_api_key=claude_api_key
+                claude_api_key=claude_api_key,
+                max_tokens=4096,
             )
             
             if not analysis_text:
@@ -2017,6 +2023,36 @@ def convert_azure_devops_images_to_base64(html_content, org_url, pat_token):
             # Keep original URL as fallback
     
     return str(soup)
+
+@app.route('/claude/status', methods=['GET'])
+def claude_status():
+    """Lightweight Claude availability (matches QC app /api/claude/status pattern)."""
+    if not is_claude_configured():
+        return jsonify({
+            'available': False,
+            'version': 'anthropic-api',
+            'error': 'ANTHROPIC_API_KEY or CLAUDE_API_KEY not set in .env / .env.local',
+        })
+    try:
+        client = anthropic.Anthropic(api_key=get_anthropic_api_key())
+        client.messages.create(
+            model=get_claude_model(),
+            max_tokens=5,
+            messages=[{'role': 'user', 'content': 'ok'}],
+        )
+        return jsonify({
+            'available': True,
+            'version': 'anthropic-api',
+            'model': get_claude_model(),
+        })
+    except Exception as e:
+        return jsonify({
+            'available': False,
+            'version': 'anthropic-api',
+            'model': get_claude_model(),
+            'error': str(e),
+        })
+
 
 @app.route('/test_error')
 def test_error():

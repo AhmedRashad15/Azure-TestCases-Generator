@@ -5,9 +5,9 @@ This version accepts Azure DevOps OAuth tokens and handles CORS for extension re
 import os
 from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
-from dotenv import load_dotenv
 import google.generativeai as genai
 import anthropic
+from ai_config import load_env, get_anthropic_api_key, get_claude_models, is_claude_configured, is_claude_billing_error
 from azure.devops.connection import Connection
 from msrest.authentication import BasicAuthentication
 import json
@@ -22,8 +22,7 @@ import base64
 from io import BytesIO
 from PIL import Image
 
-# Load environment variables
-load_dotenv()
+load_env()
 
 # Configure Gemini API
 gemini_api_key = os.getenv("GEMINI_API_KEY")
@@ -31,13 +30,11 @@ if not gemini_api_key:
     raise ValueError("GEMINI_API_KEY not found in .env file")
 genai.configure(api_key=gemini_api_key)
 
-# Configure Claude API
-claude_api_key = os.getenv("CLAUDE_API_KEY")
-if not claude_api_key:
-    print("WARNING: CLAUDE_API_KEY not found in .env file. Claude features will be unavailable.")
 claude_client = None
-if claude_api_key:
-    claude_client = anthropic.Anthropic(api_key=claude_api_key)
+if is_claude_configured():
+    claude_client = anthropic.Anthropic(api_key=get_anthropic_api_key())
+else:
+    print("WARNING: ANTHROPIC_API_KEY / CLAUDE_API_KEY not found. Claude features will be unavailable.")
 
 # Flask App with CORS support
 app = Flask(__name__)
@@ -249,7 +246,7 @@ def call_ai_provider(ai_provider, prompt, images=None):
     
     if ai_provider == 'claude':
         if not claude_client:
-            raise ValueError("Claude API is not configured. Please set CLAUDE_API_KEY in environment variables.")
+            raise ValueError("Claude API is not configured. Set ANTHROPIC_API_KEY or CLAUDE_API_KEY in .env / .env.local.")
         
         # Claude API message format - build content array with text and images
         content = []
@@ -312,24 +309,16 @@ def call_ai_provider(ai_provider, prompt, images=None):
         # Create message with content array
         messages = [{"role": "user", "content": content}]
         
-        # Try different Claude models in order of preference
-        claude_models = [
-            "claude-3-5-sonnet-20240620",
-            "claude-3-5-haiku-20241022",
-            "claude-3-opus-20240229",
-            "claude-3-sonnet-20240229"
-        ]
-        
+        claude_models = get_claude_models()
         last_error = None
         for model_name in claude_models:
             try:
                 print(f"DEBUG: Trying Claude model: {model_name}")
-                # Use higher max_tokens for test case generation (can be large JSON arrays)
-                max_tokens = 8192 if 'test case' in str(prompt).lower() or 'json array' in str(prompt).lower() else 4096
-                print(f"DEBUG: Using max_tokens={max_tokens} for Claude API call")
+                token_limit = 8192 if 'test case' in str(prompt).lower() or 'json array' in str(prompt).lower() else 4096
+                print(f"DEBUG: Using max_tokens={token_limit} for Claude API call")
                 response = claude_client.messages.create(
                     model=model_name,
-                    max_tokens=max_tokens,
+                    max_tokens=token_limit,
                     messages=messages
                 )
                 
@@ -348,13 +337,14 @@ def call_ai_provider(ai_provider, prompt, images=None):
             except Exception as e:
                 last_error = e
                 error_str = str(e)
-                # If it's a model not found error, try next model
+                if is_claude_billing_error(error_str):
+                    raise ValueError(
+                        "Anthropic API billing error for this key. Set ANTHROPIC_API_KEY (same as QC app) in .env / .env.local."
+                    ) from e
                 if 'not_found_error' in error_str or '404' in error_str or 'model' in error_str.lower():
                     print(f"DEBUG: Model {model_name} not available, trying next model...")
                     continue
-                else:
-                    # For other errors, re-raise immediately
-                    raise
+                raise
         
         # If all models failed, raise the last error
         if last_error:
